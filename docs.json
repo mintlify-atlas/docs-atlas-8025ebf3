@@ -101,9 +101,12 @@
               "commands/dom/eval",
               "commands/dom/click",
               "commands/dom/fill",
+              "commands/dom/presskey",
               "commands/dom/scroll",
               "commands/dom/screenshot",
-              "commands/dom/a11y"
+              "commands/dom/a11y",
+              "commands/dom/form",
+              "commands/dom/submit"
             ]
           },
           {

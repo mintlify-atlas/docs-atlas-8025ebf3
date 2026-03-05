@@ -1,0 +1,301 @@
+---
+title: bdg dom submit
+description: Submit a form by clicking submit button and waiting for completion
+---
+
+## Synopsis
+
+```bash
+bdg dom submit <selectorOrIndex> [options]
+```
+
+Submit a form by clicking its submit button and intelligently waiting for navigation or network completion.
+
+## Description
+
+The `bdg dom submit` command provides smart form submission with automatic waiting:
+
+- **React-compatible** - Dispatches proper synthetic events
+- **Navigation detection** - Waits for page navigation if triggered
+- **Network stability** - Waits for pending requests to complete
+- **Timeout protection** - Configurable maximum wait time
+- **0-based indexing** - Works with query results or direct selectors
+
+Unlike simple click commands, `submit` understands form submission semantics and waits appropriately for the submission to complete.
+
+## Arguments
+
+<ParamField path="selectorOrIndex" type="string" required>
+  CSS selector or numeric index (from `bdg dom query` results, 0-based)
+  
+  - Selector: `"button[type='submit']"`, `"#login-btn"`, `"form button"`
+  - Index: `0`, `1`, `2` (from previous query results)
+</ParamField>
+
+## Options
+
+<ParamField path="--index" type="number">
+  Element index when selector matches multiple elements (0-based)
+</ParamField>
+
+<ParamField path="--wait-navigation" type="boolean">
+  Wait for page navigation after submit (default: auto-detect)
+</ParamField>
+
+<ParamField path="--wait-network" type="number" default="1000">
+  Wait for network idle after submit (milliseconds)
+</ParamField>
+
+<ParamField path="--timeout" type="number" default="10000">
+  Maximum time to wait for completion (milliseconds)
+</ParamField>
+
+<ParamField path="--json" type="boolean">
+  Output in JSON format
+</ParamField>
+
+## Output Format
+
+### Human-readable Output
+
+```text
+✓ Submitted button[type='submit']
+  Navigation completed: true
+  Network stable: true
+  Duration: 847ms
+```
+
+### JSON Output
+
+```json
+{
+  "version": "0.7.2",
+  "success": true,
+  "data": {
+    "selector": "button[type='submit']",
+    "index": 0,
+    "navigationCompleted": true,
+    "networkStable": true,
+    "durationMs": 847,
+    "finalUrl": "https://example.com/dashboard"
+  }
+}
+```
+
+## Examples
+
+### Basic Form Submission
+
+```bash
+bdg dom submit "button[type='submit']"
+```
+
+Submit form and wait for navigation or network idle.
+
+### Submit by Index
+
+```bash
+# Find submit buttons
+bdg dom query "button[type='submit']"
+
+# Submit first button
+bdg dom submit 0
+```
+
+### Submit with Custom Timeout
+
+```bash
+bdg dom submit "#submit-btn" --timeout 5000
+```
+
+Wait maximum 5 seconds for submission to complete.
+
+### Force Navigation Wait
+
+```bash
+bdg dom submit "button.submit" --wait-navigation
+```
+
+Explicitly wait for page navigation (useful for multi-page forms).
+
+### Quick Submit (No Network Wait)
+
+```bash
+bdg dom submit "button" --wait-network 0
+```
+
+Click submit and return immediately after navigation.
+
+## Complete Form Workflow
+
+### Login Form
+
+```bash
+# Fill credentials
+bdg dom fill "#email" "user@example.com"
+bdg dom fill "#password" "secret123"
+
+# Submit and wait
+bdg dom submit "button[type='submit']"
+
+# Verify success
+bdg dom eval "document.querySelector('.success-message')?.textContent"
+```
+
+### Multi-Step Form
+
+```bash
+# Step 1: Personal info
+bdg dom fill "#first-name" "John"
+bdg dom fill "#last-name" "Doe"
+bdg dom submit "button.next"
+
+# Step 2: Contact info
+bdg dom fill "#email" "john@example.com"
+bdg dom fill "#phone" "+1234567890"
+bdg dom submit "button.next"
+
+# Step 3: Review and submit
+bdg dom submit "button.submit"
+```
+
+### AJAX Form (No Navigation)
+
+```bash
+# Submit without navigation
+bdg dom submit "#ajax-form button" --wait-network 2000
+
+# Check for success message
+bdg dom query ".alert-success"
+```
+
+## Waiting Behavior
+
+The command automatically detects the appropriate waiting strategy:
+
+### Navigation Wait
+
+Triggered when:
+- Form has `action` attribute with different URL
+- Submit button has `formaction` attribute
+- `--wait-navigation` flag is set
+
+Waits for:
+- `Page.loadEventFired` CDP event
+- URL change confirmation
+- Timeout if navigation doesn't occur
+
+### Network Wait
+
+Always applied (configurable):
+- Waits for all pending XHR/Fetch requests to complete
+- Default: 1000ms after last network activity
+- Configurable via `--wait-network` flag
+
+### Combined Wait
+
+For traditional form submissions:
+1. Navigation wait (if detected)
+2. Then network wait (for post-navigation requests)
+
+## Exit Codes
+
+<ResponseField name="0" type="number">
+  Success - Form submitted
+</ResponseField>
+
+<ResponseField name="81" type="number">
+  Invalid arguments - Missing selector or invalid options
+</ResponseField>
+
+<ResponseField name="83" type="number">
+  Element not found - Selector didn't match any element
+</ResponseField>
+
+<ResponseField name="87" type="number">
+  Stale element - Index from previous query is no longer valid
+</ResponseField>
+
+<ResponseField name="101" type="number">
+  Session not active - Start a session first
+</ResponseField>
+
+<ResponseField name="102" type="number">
+  Timeout - Navigation or network didn't complete in time
+</ResponseField>
+
+## Troubleshooting
+
+### Timeout Errors
+
+If submission times out:
+
+```bash
+# Increase timeout
+bdg dom submit "button" --timeout 30000
+
+# Or disable network wait
+bdg dom submit "button" --wait-network 0
+```
+
+### No Navigation Detected
+
+For AJAX forms that don't navigate:
+
+```bash
+# Set short network wait
+bdg dom submit "button" --wait-network 500
+```
+
+### Multiple Submit Buttons
+
+```bash
+# Query first to see indices
+bdg dom query "button[type='submit']"
+
+# Submit specific button by index
+bdg dom submit "button[type='submit']" --index 1
+```
+
+## Tips
+
+<Tip>
+  Use `bdg dom form` first to discover submit buttons and their selectors automatically.
+</Tip>
+
+<Warning>
+  If the form uses client-side validation that prevents submission, the command will wait until timeout. Ensure all required fields are filled first.
+</Warning>
+
+<Info>
+  The command waits for network stability to ensure AJAX requests complete. This prevents race conditions in automated workflows.
+</Info>
+
+## Comparison
+
+### `bdg dom submit` vs `bdg dom click`
+
+| Feature | `submit` | `click` |
+|---------|----------|---------|
+| Navigation wait | ✓ Auto-detect | ✗ Manual |
+| Network wait | ✓ Built-in | ✗ Manual |
+| Form semantics | ✓ Understands forms | ✗ Generic click |
+| Timeout handling | ✓ Configurable | ✗ Basic |
+| Best for | Form submissions | General interactions |
+
+## Related Commands
+
+<CardGroup cols={2}>
+  <Card title="Form Discovery" icon="magnifying-glass" href="/commands/dom/form">
+    Discover form structure and submit buttons
+  </Card>
+  <Card title="Fill Fields" icon="pen-to-square" href="/commands/dom/fill">
+    Fill form fields before submission
+  </Card>
+  <Card title="Click Elements" icon="hand-pointer" href="/commands/dom/click">
+    Generic element clicking without form semantics
+  </Card>
+  <Card title="Forms Guide" icon="book" href="/guides/forms-and-interaction">
+    Complete form interaction workflows
+  </Card>
+</CardGroup>

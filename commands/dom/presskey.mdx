@@ -1,0 +1,356 @@
+---
+title: bdg dom pressKey
+description: Press keys on elements for keyboard navigation and shortcuts
+---
+
+## Synopsis
+
+```bash
+bdg dom pressKey <selectorOrIndex> <key> [options]
+```
+
+Press keyboard keys on specific elements for Enter-to-submit, Tab navigation, arrow keys, keyboard shortcuts, and accessibility testing.
+
+## Description
+
+The `bdg dom pressKey` command provides low-level keyboard input simulation:
+
+- **Named keys** - Support for Enter, Tab, Escape, arrows, function keys
+- **Modifier keys** - Shift, Ctrl, Alt, Meta (Cmd/Win)
+- **Multiple presses** - Repeat key presses with `--times`
+- **React-compatible** - Proper event dispatch for React applications
+- **Network stability** - Optional wait for AJAX requests to complete
+- **0-based indexing** - Works with query results or direct selectors
+
+This command is essential for testing keyboard navigation, accessibility, and keyboard-driven interactions.
+
+## Arguments
+
+<ParamField path="selectorOrIndex" type="string" required>
+  CSS selector or numeric index (from `bdg dom query` results, 0-based)
+  
+  - Selector: `"#search-input"`, `"button.submit"`, `"textarea"`
+  - Index: `0`, `1`, `2` (from previous query results)
+</ParamField>
+
+<ParamField path="key" type="string" required>
+  Key name to press (case-insensitive)
+  
+  See [Supported Keys](#supported-keys) for complete list.
+</ParamField>
+
+## Options
+
+<ParamField path="--index" type="number">
+  Element index when selector matches multiple elements (0-based)
+</ParamField>
+
+<ParamField path="--times" type="number" default="1">
+  Press the key multiple times (e.g., press Down arrow 3 times)
+</ParamField>
+
+<ParamField path="--modifiers" type="string">
+  Modifier keys (comma-separated): `shift`, `ctrl`, `alt`, `meta`
+  
+  Examples: `"ctrl"`, `"shift,ctrl"`, `"meta,shift"`
+</ParamField>
+
+<ParamField path="--no-wait" type="boolean">
+  Skip waiting for network stability after key press
+</ParamField>
+
+<ParamField path="--json" type="boolean">
+  Output in JSON format
+</ParamField>
+
+## Supported Keys
+
+### Navigation Keys
+
+- `Enter` - Submit forms, activate buttons
+- `Tab` - Move to next focusable element
+- `Escape` - Close dialogs, cancel actions
+- `Backspace` - Delete previous character
+- `Delete` - Delete next character
+
+### Arrow Keys
+
+- `ArrowUp`, `ArrowDown` - Vertical navigation
+- `ArrowLeft`, `ArrowRight` - Horizontal navigation
+
+### Page Navigation
+
+- `PageUp`, `PageDown` - Scroll by page
+- `Home`, `End` - Jump to start/end
+
+### Function Keys
+
+- `F1` through `F12` - Function keys
+
+### Modifier Keys (use with --modifiers)
+
+- `shift` - Shift key
+- `ctrl` - Control key (Cmd on Mac)
+- `alt` - Alt key (Option on Mac)
+- `meta` - Meta key (Windows/Command key)
+
+### Special Keys
+
+- `Space` - Space bar
+- `Insert` - Insert key
+- `CapsLock`, `NumLock`, `ScrollLock` - Lock keys
+
+### Printable Characters
+
+Any single character: `"a"`, `"Z"`, `"1"`, `"@"`, etc.
+
+## Output Format
+
+### Human-readable Output
+
+```text
+✓ Pressed Enter on #search-input
+  Times: 1
+  Modifiers: none
+  Network stable: true
+```
+
+### JSON Output
+
+```json
+{
+  "version": "0.7.2",
+  "success": true,
+  "data": {
+    "selector": "#search-input",
+    "key": "Enter",
+    "times": 1,
+    "modifiers": [],
+    "networkStable": true
+  }
+}
+```
+
+## Examples
+
+### Submit Form with Enter
+
+```bash
+# Focus input and press Enter
+bdg dom fill "#search" "web scraping tools"
+bdg dom pressKey "#search" Enter
+```
+
+### Tab Navigation
+
+```bash
+# Navigate through form fields
+bdg dom pressKey "#first-name" Tab
+bdg dom pressKey "#last-name" Tab
+bdg dom pressKey "#email" Tab
+```
+
+### Arrow Key Navigation
+
+```bash
+# Navigate dropdown menu
+bdg dom click "#country-select"
+bdg dom pressKey "#country-select" ArrowDown --times 3
+bdg dom pressKey "#country-select" Enter
+```
+
+### Keyboard Shortcuts
+
+```bash
+# Ctrl+A (Select all)
+bdg dom pressKey "textarea" "a" --modifiers ctrl
+
+# Ctrl+Shift+K (Custom shortcut)
+bdg dom pressKey "body" "k" --modifiers ctrl,shift
+
+# Cmd+S on Mac (Save)
+bdg dom pressKey "body" "s" --modifiers meta
+```
+
+### Escape to Close Dialog
+
+```bash
+# Open dialog
+bdg dom click "button.open-modal"
+
+# Press Escape to close
+bdg dom pressKey "body" Escape
+```
+
+### Multiple Key Presses
+
+```bash
+# Press Down arrow 5 times
+bdg dom pressKey "#list" ArrowDown --times 5
+
+# Press Space 3 times
+bdg dom pressKey "#game" Space --times 3
+```
+
+## Use Cases
+
+### Keyboard Accessibility Testing
+
+```bash
+# Tab through all interactive elements
+for i in {1..10}; do
+  bdg dom pressKey "body" Tab
+  bdg dom eval "document.activeElement.tagName + '#' + document.activeElement.id"
+done
+```
+
+### Autocomplete Navigation
+
+```bash
+# Type and navigate suggestions
+bdg dom fill "#search" "java"
+sleep 0.5
+bdg dom pressKey "#search" ArrowDown --times 2
+bdg dom pressKey "#search" Enter
+```
+
+### Keyboard-Only Form Submission
+
+```bash
+# Fill and submit without clicking
+bdg dom fill "#username" "john"
+bdg dom pressKey "#username" Tab
+bdg dom fill "#password" "secret"
+bdg dom pressKey "#password" Enter
+```
+
+### Game Controls
+
+```bash
+# Arrow key game controls
+bdg dom pressKey "#game-canvas" ArrowUp --times 3
+bdg dom pressKey "#game-canvas" ArrowRight --times 2
+bdg dom pressKey "#game-canvas" Space
+```
+
+## Key Mapping
+
+The command uses CDP `Input.dispatchKeyEvent` with the following key codes:
+
+- **Enter** → `keyCode: 13`
+- **Tab** → `keyCode: 9`
+- **Escape** → `keyCode: 27`
+- **Backspace** → `keyCode: 8`
+- **Arrow keys** → `keyCode: 37-40`
+
+For complete key code mappings, see `src/commands/dom/keyMapping.ts` in the source code.
+
+## Exit Codes
+
+<ResponseField name="0" type="number">
+  Success - Key pressed
+</ResponseField>
+
+<ResponseField name="81" type="number">
+  Invalid arguments - Unknown key name or invalid options
+</ResponseField>
+
+<ResponseField name="83" type="number">
+  Element not found - Selector didn't match any element
+</ResponseField>
+
+<ResponseField name="87" type="number">
+  Stale element - Index from previous query is no longer valid
+</ResponseField>
+
+<ResponseField name="101" type="number">
+  Session not active - Start a session first
+</ResponseField>
+
+## Troubleshooting
+
+### Key Not Recognized
+
+If you get "Unknown key" error:
+
+```bash
+# Check supported keys list above
+# Use exact key names (case-insensitive)
+bdg dom pressKey "input" Enter  # ✓ Correct
+bdg dom pressKey "input" enter  # ✓ Also works
+bdg dom pressKey "input" Return # ✗ Wrong - use Enter
+```
+
+### Element Not Focusable
+
+Some elements can't receive keyboard events:
+
+```bash
+# ✗ Wrong - div not focusable
+bdg dom pressKey "div.container" Enter
+
+# ✓ Correct - button is focusable
+bdg dom pressKey "button" Enter
+
+# ✓ Correct - make div focusable first
+bdg dom eval "document.querySelector('div').setAttribute('tabindex', '0')"
+bdg dom pressKey "div" Enter
+```
+
+### Modifier Keys Not Working
+
+Ensure correct modifier syntax:
+
+```bash
+# ✓ Correct
+bdg dom pressKey "body" "s" --modifiers ctrl
+
+# ✗ Wrong - comma-separated for multiple
+bdg dom pressKey "body" "s" --modifiers "ctrl shift"
+
+# ✓ Correct - multiple modifiers
+bdg dom pressKey "body" "s" --modifiers ctrl,shift
+```
+
+## Tips
+
+<Tip>
+  Use `--no-wait` for rapid key sequences where network requests aren't involved (e.g., game controls, text editing).
+</Tip>
+
+<Warning>
+  Key events must be sent to focusable elements. Ensure the element can receive keyboard input (input, button, textarea, or has `tabindex` attribute).
+</Warning>
+
+<Info>
+  For form submission, prefer `bdg dom submit` over `pressKey Enter` as it handles navigation and network waiting intelligently.
+</Info>
+
+## Comparison
+
+### `pressKey` vs `fill`
+
+| Feature | `pressKey` | `fill` |
+|---------|-----------|--------|
+| Use case | Keyboard navigation | Text input |
+| Supports shortcuts | ✓ Yes | ✗ No |
+| Supports arrows | ✓ Yes | ✗ No |
+| Fills text | ✗ Character by character | ✓ Full string |
+| Navigation keys | ✓ Yes | ✗ No |
+
+## Related Commands
+
+<CardGroup cols={2}>
+  <Card title="Fill Fields" icon="pen-to-square" href="/commands/dom/fill">
+    Fill form fields with text values
+  </Card>
+  <Card title="Click Elements" icon="hand-pointer" href="/commands/dom/click">
+    Click elements instead of using Enter key
+  </Card>
+  <Card title="Submit Forms" icon="paper-plane" href="/commands/dom/submit">
+    Smart form submission with waiting
+  </Card>
+  <Card title="Forms Guide" icon="book" href="/guides/forms-and-interaction">
+    Complete form interaction workflows
+  </Card>
+</CardGroup>

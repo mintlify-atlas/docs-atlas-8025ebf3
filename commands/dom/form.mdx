@@ -1,0 +1,250 @@
+---
+title: bdg dom form
+description: Discover forms with semantic labels, values, and validation state
+---
+
+## Synopsis
+
+```bash
+bdg dom form [options]
+```
+
+Discover all forms on the current page with semantic labels, current values, validation state, and suggested commands for agent consumption.
+
+## Description
+
+The `bdg dom form` command provides intelligent form discovery with:
+
+- **Semantic field labels** - Human-readable labels from `<label>`, `aria-label`, placeholder, or name attributes
+- **Current values** - Pre-filled or user-entered values
+- **Validation state** - Required fields, patterns, min/max constraints
+- **Suggested commands** - Ready-to-use `bdg dom fill` commands for each field
+- **Submit detection** - Identifies submit buttons and form action URLs
+
+This command is specifically designed for AI agents to understand form structure without manual inspection.
+
+## Options
+
+<ParamField path="--all" type="boolean">
+  Show all forms expanded (default: collapsed after first form)
+</ParamField>
+
+<ParamField path="--brief" type="boolean">
+  Quick scan - field names, types, and required status only (minimal output)
+</ParamField>
+
+<ParamField path="--json" type="boolean">
+  Output in JSON format for programmatic consumption
+</ParamField>
+
+## Output Format
+
+### Human-readable Output
+
+```text
+Found 2 forms
+
+Form #1: Login (id: login-form)
+  Action: /api/auth/login (POST)
+  Submit: [0] Login button
+
+  Fields (2):
+    [0] Email (email, required)
+        Current: ""
+        Command: bdg dom fill "#email" "user@example.com"
+    
+    [1] Password (password, required)
+        Current: ""
+        Command: bdg dom fill "#password" "secret123"
+```
+
+### JSON Output
+
+```json
+{
+  "version": "0.7.2",
+  "success": true,
+  "data": {
+    "forms": [
+      {
+        "id": "login-form",
+        "name": "Login",
+        "action": "/api/auth/login",
+        "method": "POST",
+        "fields": [
+          {
+            "index": 0,
+            "label": "Email",
+            "type": "email",
+            "name": "email",
+            "selector": "#email",
+            "required": true,
+            "value": "",
+            "validation": {
+              "pattern": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+            },
+            "command": "bdg dom fill \"#email\" \"user@example.com\""
+          }
+        ],
+        "buttons": [
+          {
+            "index": 0,
+            "label": "Login",
+            "type": "submit",
+            "selector": "button[type='submit']"
+          }
+        ]
+      }
+    ],
+    "summary": {
+      "totalForms": 1,
+      "totalFields": 2,
+      "requiredFields": 2,
+      "emptyRequired": 2
+    }
+  }
+}
+```
+
+## Examples
+
+### Basic Form Discovery
+
+```bash
+bdg dom form
+```
+
+Discover all forms with semantic labels and suggested fill commands.
+
+### Quick Scan (Brief Mode)
+
+```bash
+bdg dom form --brief
+```
+
+Get field names, types, and required status without detailed validation rules.
+
+### JSON Output for Automation
+
+```bash
+bdg dom form --json | jq '.data.forms[0].fields[] | .command'
+```
+
+Extract all fill commands for the first form.
+
+### Show All Forms Expanded
+
+```bash
+bdg dom form --all
+```
+
+Display all forms in expanded format (default collapses after first form).
+
+## Field Types Detected
+
+The command recognizes these HTML input types:
+
+- `text`, `email`, `password`, `url`, `tel`, `number`
+- `date`, `time`, `datetime-local`, `month`, `week`
+- `checkbox`, `radio`, `select`, `textarea`
+- `file`, `color`, `range`, `search`, `hidden`
+
+## Validation Detection
+
+Form discovery extracts validation constraints:
+
+- **Required** - `required` attribute
+- **Pattern** - `pattern` attribute (regex)
+- **Min/Max Length** - `minlength`, `maxlength` attributes
+- **Min/Max Value** - `min`, `max` attributes (for number/date inputs)
+- **Step** - `step` attribute (for number inputs)
+
+## Use Cases
+
+### Agent-Driven Form Filling
+
+```bash
+# 1. Discover form structure
+bdg dom form --json > form.json
+
+# 2. Extract and execute fill commands
+jq -r '.data.forms[0].fields[] | .command' form.json | while read cmd; do
+  eval "$cmd"
+done
+
+# 3. Submit form
+bdg dom submit "button[type='submit']"
+```
+
+### Form Validation Testing
+
+```bash
+# Find required fields
+bdg dom form --json | jq '.data.forms[0].fields[] | select(.required) | .label'
+
+# Find empty required fields
+bdg dom form --json | jq '.data.summary.emptyRequired'
+```
+
+### Multi-Step Form Discovery
+
+```bash
+# Discover current step
+bdg dom form --brief
+
+# Fill and submit
+bdg dom fill "#first-name" "John"
+bdg dom submit "button.next"
+
+# Discover next step
+bdg dom form --brief
+```
+
+## Exit Codes
+
+<ResponseField name="0" type="number">
+  Success - Forms discovered
+</ResponseField>
+
+<ResponseField name="83" type="number">
+  No forms found on page
+</ResponseField>
+
+<ResponseField name="101" type="number">
+  Session not active - start a session first
+</ResponseField>
+
+<ResponseField name="102" type="number">
+  CDP connection timeout
+</ResponseField>
+
+## Tips
+
+<Tip>
+  Use `--brief` mode for quick form structure checks. It reduces token usage by 60-70% compared to full output.
+</Tip>
+
+<Warning>
+  Forms inside `<iframe>` elements are not detected. The command only discovers forms in the main document context.
+</Warning>
+
+<Info>
+  The suggested commands use CSS selectors optimized for stability (prefer `id`, `name`, then `data-*` attributes over class names).
+</Info>
+
+## Related Commands
+
+<CardGroup cols={2}>
+  <Card title="Fill Fields" icon="pen-to-square" href="/commands/dom/fill">
+    Execute fill commands from form discovery
+  </Card>
+  <Card title="Submit Forms" icon="paper-plane" href="/commands/dom/submit">
+    Submit forms after filling fields
+  </Card>
+  <Card title="Forms Guide" icon="book" href="/guides/forms-and-interaction">
+    Complete form interaction workflow
+  </Card>
+  <Card title="Testing Forms" icon="flask" href="/recipes/testing-forms">
+    Recipe for form validation testing
+  </Card>
+</CardGroup>
