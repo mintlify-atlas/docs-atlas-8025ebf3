@@ -1,0 +1,171 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "Browser Debugger CLI",
+  "projectDescription": "CLI tool for direct Chrome DevTools Protocol access via terminal, designed for AI agents and developers.",
+  "theme": "aspen",
+  "primaryColor": "#cb0404",
+  "lightColor": "#f3d2d2",
+  "darkColor": "#e37b84",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/sessions",
+              "concepts/cdp-access",
+              "concepts/agent-friendly-design"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/dom-inspection",
+              "guides/network-monitoring",
+              "guides/console-debugging",
+              "guides/forms-and-interaction",
+              "guides/screenshots"
+            ]
+          },
+          {
+            "group": "For AI Agents",
+            "pages": [
+              "agents/overview",
+              "agents/discovery-pattern",
+              "agents/error-handling",
+              "agents/benchmarks"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/architecture",
+              "advanced/exit-codes",
+              "advanced/troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Command Reference",
+        "groups": [
+          {
+            "group": "Session Management",
+            "pages": [
+              "commands/start",
+              "commands/status",
+              "commands/stop",
+              "commands/cleanup"
+            ]
+          },
+          {
+            "group": "Data Inspection",
+            "pages": [
+              "commands/peek",
+              "commands/tail",
+              "commands/details"
+            ]
+          },
+          {
+            "group": "DOM Commands",
+            "pages": [
+              "commands/dom/query",
+              "commands/dom/get",
+              "commands/dom/eval",
+              "commands/dom/click",
+              "commands/dom/fill",
+              "commands/dom/scroll",
+              "commands/dom/screenshot",
+              "commands/dom/a11y"
+            ]
+          },
+          {
+            "group": "Network Commands",
+            "pages": [
+              "commands/network/list",
+              "commands/network/har",
+              "commands/network/cookies",
+              "commands/network/headers"
+            ]
+          },
+          {
+            "group": "CDP Commands",
+            "pages": [
+              "commands/cdp/overview",
+              "commands/cdp/domains"
+            ]
+          },
+          {
+            "group": "Console Commands",
+            "pages": [
+              "commands/console"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Recipes",
+        "groups": [
+          {
+            "group": "Common Tasks",
+            "pages": [
+              "recipes/debugging-spa",
+              "recipes/testing-forms",
+              "recipes/monitoring-apis",
+              "recipes/extracting-data"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Direct Chrome DevTools Protocol (CDP) access to all 644 protocol methods",
+    "Self-documenting interface with --list, --search, and --describe flags",
+    "DOM inspection with CSS selectors and accessibility tree queries",
+    "Network monitoring with HAR export and request filtering",
+    "Console message tracking with full argument inspection",
+    "Token-efficient design optimized for AI agents",
+    "Semantic exit codes for programmatic error handling",
+    "Progressive disclosure with simple commands and deep capabilities",
+    "Persistent daemon architecture for fast command execution",
+    "Unix-friendly with JSON output and pipe support"
+  ],
+  "publicApiSurface": [
+    "bdg <url> - Start session with URL",
+    "bdg status - Check session status",
+    "bdg stop - End session",
+    "bdg cleanup - Clean up stale processes",
+    "bdg peek - Preview collected data",
+    "bdg tail - Continuous monitoring",
+    "bdg details - Get full request/console details",
+    "bdg dom query <selector> - Find DOM elements",
+    "bdg dom get <index> - Get element details",
+    "bdg dom eval <expression> - Evaluate JavaScript",
+    "bdg dom click <selector> - Click elements",
+    "bdg dom fill <selector> <value> - Fill form fields",
+    "bdg dom scroll <selector> - Scroll to elements",
+    "bdg dom screenshot - Capture page screenshots",
+    "bdg dom a11y tree - View accessibility tree",
+    "bdg dom a11y query - Query accessibility nodes",
+    "bdg network list - List network requests",
+    "bdg network har - Export HAR file",
+    "bdg network getCookies - List cookies",
+    "bdg network headers <requestId> - Show request headers",
+    "bdg cdp <Domain.method> - Execute any CDP method",
+    "bdg cdp --list - List CDP domains",
+    "bdg cdp <Domain> --list - List domain methods",
+    "bdg cdp <Domain.method> --describe - Show method schema",
+    "bdg console - View console messages"
+  ]
+}
