@@ -1,0 +1,444 @@
+---
+title: "Extracting Data from Web Pages"
+description: "Use JavaScript evaluation, DOM queries, and accessibility tree inspection to scrape structured data"
+---
+
+Extracting data from web pages requires navigating the DOM, executing JavaScript, and handling dynamic content. This recipe shows how to use **bdg** to extract structured data efficiently.
+
+## Scenario
+
+You need to extract product information from an e-commerce site:
+
+- Product titles, prices, and ratings
+- Availability status
+- Customer reviews
+- Dynamic content loaded via JavaScript
+
+The data will be used for price monitoring or analysis.
+
+## Workflow
+
+<Steps>
+  <Step title="Start session and wait for page load">
+    Navigate to the target page and ensure all dynamic content has loaded.
+
+    ```bash
+    bdg https://example.com/products
+
+    # Wait for JavaScript execution to complete
+    sleep 3
+
+    # Check if key content is present
+    bdg dom query ".product-card"
+    ```
+
+    **Expected output:**
+    ```text
+    Found 24 nodes matching: .product-card
+    [0] <div class="product-card" data-id="123">
+    [1] <div class="product-card" data-id="124">
+    ...
+    ```
+  </Step>
+
+  <Step title="Extract data using JavaScript evaluation">
+    Use `bdg dom eval` to execute JavaScript and extract structured data.
+
+    ```bash
+    # Extract all product data as JSON
+    bdg dom eval '
+    Array.from(document.querySelectorAll(".product-card")).map(card => ({
+      id: card.dataset.id,
+      title: card.querySelector(".product-title")?.textContent?.trim(),
+      price: card.querySelector(".product-price")?.textContent?.trim(),
+      rating: card.querySelector(".rating")?.getAttribute("aria-label"),
+      inStock: card.querySelector(".in-stock") !== null,
+      url: card.querySelector("a")?.href
+    }))
+    ' --json
+    ```
+
+    **Expected output:**
+    ```json
+    {
+      "result": {
+        "type": "object",
+        "value": [
+          {
+            "id": "123",
+            "title": "Wireless Headphones",
+            "price": "$79.99",
+            "rating": "4.5 out of 5 stars",
+            "inStock": true,
+            "url": "https://example.com/products/123"
+          },
+          {
+            "id": "124",
+            "title": "Bluetooth Speaker",
+            "price": "$49.99",
+            "rating": "4.2 out of 5 stars",
+            "inStock": false,
+            "url": "https://example.com/products/124"
+          }
+        ]
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Use accessibility tree for semantic data">
+    The accessibility tree provides semantic structure without HTML noise.
+
+    ```bash
+    # Query for product elements by role
+    bdg dom a11y query role=article
+
+    # Get semantic representation (70-99% token reduction)
+    bdg dom get ".product-card" --json
+    ```
+
+    **Expected output:**
+    ```json
+    {
+      "node": {
+        "role": "article",
+        "name": "Wireless Headphones",
+        "description": "$79.99, 4.5 stars",
+        "focusable": true
+      }
+    }
+    ```
+
+    This is more token-efficient than parsing full HTML.
+  </Step>
+
+  <Step title="Handle pagination to extract all pages">
+    Navigate through paginated results to collect complete dataset.
+
+    ```bash
+    # Extract first page
+    bdg dom eval 'Array.from(document.querySelectorAll(".product-card")).map(c => ({title: c.querySelector(".product-title").textContent}))' --json > page1.json
+
+    # Click "Next" button
+    bdg dom click ".pagination-next"
+    sleep 2
+
+    # Extract second page
+    bdg dom eval 'Array.from(document.querySelectorAll(".product-card")).map(c => ({title: c.querySelector(".product-title").textContent}))' --json > page2.json
+
+    # Merge results
+    jq -s 'add' page1.json page2.json > all-products.json
+    ```
+  </Step>
+
+  <Step title="Scroll to load lazy-loaded content">
+    Some sites load content only when scrolled into view.
+
+    ```bash
+    # Scroll to bottom to trigger lazy loading
+    bdg dom scroll --bottom
+
+    # Wait for content to load
+    sleep 2
+
+    # Check if more products appeared
+    bdg dom query ".product-card" --json | jq '.data.nodes | length'
+
+    # Extract all (including lazy-loaded)
+    bdg dom eval 'document.querySelectorAll(".product-card").length'
+    ```
+  </Step>
+
+  <Step title="Extract data from specific product page">
+    Navigate to a product detail page and extract comprehensive data.
+
+    ```bash
+    # Navigate to product page via JavaScript
+    bdg dom eval 'window.location.href = "https://example.com/products/123"'
+
+    # Or click a product link
+    bdg dom click ".product-card:first-child a"
+
+    # Wait for navigation
+    sleep 3
+
+    # Extract detailed product data
+    bdg dom eval '
+    ({
+      title: document.querySelector(".product-title")?.textContent,
+      price: document.querySelector(".price")?.textContent,
+      description: document.querySelector(".description")?.textContent,
+      images: Array.from(document.querySelectorAll(".product-image img")).map(img => img.src),
+      specifications: Array.from(document.querySelectorAll(".specs tr")).map(row => ({
+        name: row.querySelector("th")?.textContent,
+        value: row.querySelector("td")?.textContent
+      })),
+      reviews: Array.from(document.querySelectorAll(".review")).map(review => ({
+        author: review.querySelector(".author")?.textContent,
+        rating: review.querySelector(".rating")?.getAttribute("aria-label"),
+        text: review.querySelector(".review-text")?.textContent
+      }))
+    })
+    ' --json > product-123.json
+    ```
+  </Step>
+
+  <Step title="Handle dynamic content (AJAX-loaded)">
+    Wait for AJAX content to load before extraction.
+
+    ```bash
+    # Trigger action that loads content
+    bdg dom click "#load-reviews"
+
+    # Wait for network activity to complete
+    sleep 2
+
+    # Verify content loaded by checking network
+    bdg network list --filter "domain:api.example.com" --last 1
+
+    # Extract newly loaded content
+    bdg dom query ".review" --json | jq '.data.nodes | length'
+    ```
+  </Step>
+
+  <Step title="Extract tabular data">
+    For data in HTML tables, extract as structured JSON.
+
+    ```bash
+    # Extract table data
+    bdg dom eval '
+    Array.from(document.querySelectorAll("table tbody tr")).map(row => {
+      const cells = Array.from(row.querySelectorAll("td"));
+      return {
+        product: cells[0]?.textContent?.trim(),
+        price: cells[1]?.textContent?.trim(),
+        stock: cells[2]?.textContent?.trim()
+      };
+    })
+    ' --json | jq '.result.value' > products-table.json
+    ```
+
+    **Expected output (products-table.json):**
+    ```json
+    [
+      {"product": "Laptop", "price": "$999", "stock": "In Stock"},
+      {"product": "Mouse", "price": "$29", "stock": "Out of Stock"},
+      {"product": "Keyboard", "price": "$79", "stock": "In Stock"}
+    ]
+    ```
+  </Step>
+
+  <Step title="Export complete session data">
+    Stop the session to capture final DOM snapshot.
+
+    ```bash
+    bdg stop
+
+    # Extract DOM from session file
+    cat ~/.bdg/session.json | jq '.data.dom.html' > full-page.html
+
+    # Extract accessibility tree
+    cat ~/.bdg/session.json | jq '.data.dom.a11yTree' > a11y-tree.json
+    ```
+  </Step>
+</Steps>
+
+## Extraction Patterns
+
+### Extract all links
+
+```bash
+bdg dom eval 'Array.from(document.querySelectorAll("a")).map(a => ({text: a.textContent.trim(), href: a.href}))' --json | jq '.result.value'
+```
+
+### Extract images with alt text
+
+```bash
+bdg dom eval 'Array.from(document.querySelectorAll("img")).map(img => ({src: img.src, alt: img.alt}))' --json | jq '.result.value'
+```
+
+### Extract form field values
+
+```bash
+bdg dom form --json | jq '.data.forms[0].fields[] | {label, value}'
+```
+
+### Extract meta tags
+
+```bash
+bdg dom eval 'Array.from(document.querySelectorAll("meta")).reduce((acc, meta) => {const name = meta.name || meta.property; if (name) acc[name] = meta.content; return acc}, {})' --json | jq '.result.value'
+```
+
+### Extract JSON-LD structured data
+
+```bash
+bdg dom eval 'Array.from(document.querySelectorAll("script[type=\"application/ld+json\"]")).map(s => JSON.parse(s.textContent))' --json | jq '.result.value'
+```
+
+## Common Challenges
+
+<AccordionGroup>
+  <Accordion title="Content loaded via infinite scroll">
+    **Solution:** Scroll incrementally and check for new content.
+
+    ```bash
+    # Scroll down in chunks
+    for i in {1..10}; do
+      bdg dom scroll --down 500
+      sleep 1
+      COUNT=$(bdg dom query ".product-card" --json | jq '.data.nodes | length')
+      echo "Items loaded: $COUNT"
+    done
+    ```
+  </Accordion>
+
+  <Accordion title="Dynamic class names (React/CSS modules)">
+    **Solution:** Use stable attributes like `data-testid` or semantic roles.
+
+    ```bash
+    # Instead of brittle class names
+    # ❌ bdg dom query ".css-1x2y3z4"
+
+    # Use data attributes
+    bdg dom query "[data-testid='product-card']"
+
+    # Or accessibility roles
+    bdg dom a11y query role=article
+    ```
+  </Accordion>
+
+  <Accordion title="Content in iframes">
+    **Solution:** Use CDP to switch to iframe context.
+
+    ```bash
+    # List all frames
+    bdg cdp Page.getFrameTree --json
+
+    # Execute in specific frame (requires CDP scripting)
+    # Note: Direct iframe support is limited; consider extracting iframe src and navigating to it
+    bdg dom eval 'document.querySelector("iframe").src'
+    ```
+  </Accordion>
+
+  <Accordion title="JavaScript-rendered content with delay">
+    **Solution:** Poll for element existence before extraction.
+
+    ```bash
+    # Wait for element to appear
+    for i in {1..10}; do
+      EXISTS=$(bdg dom query ".dynamic-content" --json | jq '.data.nodes | length')
+      if [ $EXISTS -gt 0 ]; then
+        echo "Content loaded"
+        break
+      fi
+      sleep 1
+    done
+
+    # Extract content
+    bdg dom eval 'document.querySelector(".dynamic-content").textContent'
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Full Extraction Script Example
+
+Automated product data extraction:
+
+```bash
+#!/bin/bash
+# extract-products.sh
+
+URL="https://example.com/products"
+OUTPUT="products-$(date +%Y%m%d-%H%M%S).json"
+
+echo "Starting extraction from $URL"
+bdg $URL
+
+# Wait for page load
+sleep 3
+
+# Extract product count
+TOTAL=$(bdg dom query ".product-card" --json | jq '.data.nodes | length')
+echo "Found $TOTAL products"
+
+# Extract all product data
+bdg dom eval '
+Array.from(document.querySelectorAll(".product-card")).map((card, index) => ({
+  index,
+  id: card.dataset.id,
+  title: card.querySelector(".product-title")?.textContent?.trim(),
+  price: card.querySelector(".product-price")?.textContent?.trim(),
+  priceNumeric: parseFloat(card.querySelector(".product-price")?.textContent?.replace(/[^0-9.]/g, "")),
+  currency: card.querySelector(".product-price")?.textContent?.match(/[$€£]/)?.[0],
+  rating: parseFloat(card.querySelector(".rating")?.getAttribute("aria-label")?.match(/[0-9.]+/)?.[0]),
+  reviewCount: parseInt(card.querySelector(".review-count")?.textContent?.match(/[0-9]+/)?.[0]),
+  inStock: card.querySelector(".in-stock") !== null,
+  imageUrl: card.querySelector("img")?.src,
+  url: card.querySelector("a")?.href
+}))
+' --json | jq '.result.value' > $OUTPUT
+
+echo "Extracted $(jq 'length' $OUTPUT) products to $OUTPUT"
+
+# Summary statistics
+echo "\nSummary:"
+echo "  In stock: $(jq '[.[] | select(.inStock)] | length' $OUTPUT)"
+echo "  Out of stock: $(jq '[.[] | select(.inStock | not)] | length' $OUTPUT)"
+echo "  Avg price: $$(jq '[.[] | .priceNumeric] | add / length' $OUTPUT)"
+echo "  Avg rating: $(jq '[.[] | .rating] | add / length' $OUTPUT)"
+
+bdg stop
+echo "Extraction complete"
+```
+
+## Best Practices
+
+### Use semantic queries for reliability
+
+Accessibility attributes are more stable than CSS classes:
+
+```bash
+# Prefer
+bdg dom a11y query role=button,name="Add to Cart"
+
+# Over
+bdg dom query ".btn-primary.add-cart.css-xyz"
+```
+
+### Extract incrementally
+
+Don't load everything into memory at once:
+
+```bash
+# Extract and save page by page
+for page in {1..10}; do
+  bdg dom eval "/* extraction script */" --json > "page-$page.json"
+  bdg dom click ".next-page"
+  sleep 2
+done
+```
+
+### Validate extracted data
+
+Check for missing or malformed data:
+
+```bash
+jq '[.[] | select(.title == null or .price == null)] | length' products.json
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="JavaScript Evaluation" icon="code" href="/commands/dom/eval">
+    Learn `bdg dom eval` command in detail
+  </Card>
+  <Card title="Accessibility Tree" icon="universal-access" href="/commands/dom/a11y">
+    Use semantic queries for data extraction
+  </Card>
+  <Card title="DOM Commands" icon="magnifying-glass" href="/guides/dom-inspection">
+    Master DOM querying and inspection
+  </Card>
+  <Card title="CDP Access" icon="plug" href="/concepts/cdp-access">
+    Access raw CDP methods for advanced use cases
+  </Card>
+</CardGroup>

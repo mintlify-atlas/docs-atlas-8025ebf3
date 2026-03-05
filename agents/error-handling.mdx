@@ -1,0 +1,523 @@
+---
+title: "Error Handling"
+description: "Semantic exit codes, JSON error format, and recovery suggestions for AI agents"
+---
+
+## Semantic Exit Codes
+
+bdg uses **semantic exit codes** that communicate actionable information, not just success/failure. This enables agents to make programmatic decisions about retries, error recovery, and escalation.
+
+```bash
+bdg dom click "#missing-button"
+echo $?  # 83 (RESOURCE_NOT_FOUND)
+
+bdg dom fill "input" "invalid"  # Validation error
+echo $?  # 81 (INVALID_ARGUMENTS)
+
+bdg cdp Network.timeout --params '{}'
+echo $?  # 102 (CDP_TIMEOUT)
+```
+
+## Exit Code Ranges
+
+Exit codes follow semantic ranges for predictable automation:
+
+<CodeGroup>
+```text Success
+0        Success (command completed successfully)
+```
+
+```text User Errors (80-99)
+80-99    User errors (invalid input, permissions, resource issues)
+```
+
+```text Software Errors (100-119)
+100-119  Software errors (bugs, integration failures, timeouts)
+```
+</CodeGroup>
+
+<Info>
+  **Stability guarantee:** Exit code values are part of bdg's stable public API and will not change in minor versions
+</Info>
+
+## Complete Exit Code Registry
+
+### Success Codes
+
+| Code | Name | Description | Agent Action |
+|------|------|-------------|-------------|
+| 0 | SUCCESS | Operation completed successfully | Proceed to next step |
+
+### User Error Codes (80-99)
+
+| Code | Name | Description | Agent Action |
+|------|------|-------------|-------------|
+| 80 | INVALID_URL | Invalid URL format or unreachable URL | Fix URL format, don't retry |
+| 81 | INVALID_ARGUMENTS | Invalid command-line arguments or options | Fix arguments, don't retry |
+| 82 | PERMISSION_DENIED | Insufficient permissions for operation | Check permissions, escalate |
+| 83 | RESOURCE_NOT_FOUND | Requested resource not found (session, element, etc.) | Verify resource exists, try alternate |
+| 84 | RESOURCE_ALREADY_EXISTS | Resource already exists (duplicate session, etc.) | Use existing resource or clean up |
+| 85 | RESOURCE_BUSY | Resource is locked or busy | Wait and retry with backoff |
+| 86 | DAEMON_ALREADY_RUNNING | Daemon is already running | Use existing daemon or cleanup |
+| 87 | STALE_CACHE | Cache invalidated by navigation or DOM changes | Re-run query to refresh cache |
+| 88 | NO_FORMS_FOUND | No forms discovered on the page | Verify page loaded, check selectors |
+| 89 | FORM_IN_IFRAME | Form is inside an iframe (not yet supported) | Use CDP to access iframe context |
+
+### Software Error Codes (100-119)
+
+| Code | Name | Description | Agent Action |
+|------|------|-------------|-------------|
+| 100 | CHROME_LAUNCH_FAILURE | Chrome browser failed to launch | Retry once, then escalate |
+| 101 | CDP_CONNECTION_FAILURE | Failed to connect to Chrome DevTools Protocol | Retry with backoff, check Chrome |
+| 102 | CDP_TIMEOUT | CDP operation timed out | Retry with longer timeout |
+| 103 | SESSION_FILE_ERROR | Session file read/write error | Check file permissions, cleanup |
+| 104 | UNHANDLED_EXCEPTION | Unhandled exception in code | Report bug, don't retry |
+| 105 | SIGNAL_HANDLER_ERROR | Signal handler error | Report bug, don't retry |
+| 110 | SOFTWARE_ERROR | Generic software error (use specific codes when possible) | Report bug, don't retry |
+
+<Tip>
+  **Use ranges for category detection:** 80-99 = user error, 100-119 = software error
+</Tip>
+
+## JSON Error Output
+
+All errors are returned in a structured format when using `--json`:
+
+```bash
+bdg dom click "#nonexistent" --json
+```
+
+```json
+{
+  "version": "0.6.0",
+  "success": false,
+  "error": "Element not found: #nonexistent",
+  "exitCode": 83,
+  "suggestion": "Verify selector exists on page. Use 'bdg dom query \"#nonexistent\"' to test selector."
+}
+```
+
+### Error Response Schema
+
+```typescript
+interface BdgErrorResponse {
+  version: string;          // bdg version
+  success: false;           // Always false for errors
+  error: string;            // Human-readable error message
+  exitCode: number;         // Semantic exit code (80-119)
+  suggestion?: string;      // Optional recovery suggestion
+  details?: {               // Optional additional context
+    [key: string]: unknown;
+  };
+}
+```
+
+## Recovery Suggestions
+
+Every error includes actionable recovery suggestions:
+
+### Example 1: Element Not Found
+
+```bash
+bdg dom click "button.submit"
+```
+
+```json
+{
+  "success": false,
+  "error": "Element not found: button.submit",
+  "exitCode": 83,
+  "suggestion": "Verify selector exists on page. Use 'bdg dom query \"button.submit\"' to test selector."
+}
+```
+
+### Example 2: Stale Cache
+
+```bash
+bdg dom get 0  # After navigation invalidated cache
+```
+
+```json
+{
+  "success": false,
+  "error": "Element at index 0 not accessible",
+  "exitCode": 87,
+  "suggestion": "Re-run query to refresh cache. DOM was modified or page navigated."
+}
+```
+
+### Example 3: Invalid CDP Parameters
+
+```bash
+bdg cdp Network.setCookie --params '{"name":"test"}'
+```
+
+```json
+{
+  "success": false,
+  "error": "Invalid CDP parameters: missing required field 'url'",
+  "exitCode": 81,
+  "suggestion": "Use 'bdg cdp Network.setCookie --describe' to see required parameters.",
+  "details": {
+    "missing": ["url"],
+    "provided": ["name"]
+  }
+}
+```
+
+### Example 4: Session Not Found
+
+```bash
+bdg dom query "button"  # No active session
+```
+
+```json
+{
+  "success": false,
+  "error": "No active session found",
+  "exitCode": 83,
+  "suggestion": "Start a session with: bdg <url>"
+}
+```
+
+<Check>
+  **Suggestions are executable commands** - agents can run them directly
+</Check>
+
+## Agent Decision Logic
+
+Agents should implement retry logic based on exit code ranges:
+
+```typescript
+const result = await exec('bdg dom click "button"');
+const exitCode = result.exitCode;
+
+if (exitCode === 0) {
+  // Success - proceed to next step
+  return result.data;
+}
+
+if (exitCode >= 80 && exitCode <= 89) {
+  // User/input error - don't retry, fix input
+  if (exitCode === 83) {
+    // RESOURCE_NOT_FOUND - try alternate selector
+    return tryAlternateSelector();
+  }
+  if (exitCode === 81) {
+    // INVALID_ARGUMENTS - fix arguments
+    return fixArguments();
+  }
+}
+
+if (exitCode >= 90 && exitCode <= 99) {
+  // Resource/state error - may be recoverable
+  if (exitCode === 87) {
+    // STALE_CACHE - re-run query
+    return refreshCacheAndRetry();
+  }
+  if (exitCode === 85) {
+    // RESOURCE_BUSY - wait and retry
+    await sleep(1000);
+    return retry();
+  }
+}
+
+if (exitCode >= 100 && exitCode <= 109) {
+  // Integration/external error - retry with backoff
+  if (exitCode === 102) {
+    // CDP_TIMEOUT - retry with longer timeout
+    return retryWithLongerTimeout();
+  }
+  // Retry with exponential backoff
+  return retryWithBackoff();
+}
+
+if (exitCode >= 110 && exitCode <= 119) {
+  // Internal software error - don't retry, report bug
+  return reportBug(result.error);
+}
+```
+
+## Error Context in stderr
+
+Even without `--json`, errors provide structured context:
+
+```bash
+bdg dom click "#missing" 2>&1
+```
+
+```text
+Error: Element not found: #missing
+
+Suggestion: Verify selector exists on page. Use 'bdg dom query "#missing"' to test selector.
+
+Exit code: 83 (RESOURCE_NOT_FOUND)
+```
+
+<Note>
+  **Errors go to stderr** - stdout remains clean for piping, even on failure
+</Note>
+
+## Typo Detection
+
+For commands with limited choices, bdg suggests corrections:
+
+```bash
+bdg cdp Network.getCokies  # Typo in method name
+```
+
+```text
+Error: Method 'getCokies' not found in domain 'Network'
+
+Did you mean:
+  Network.getCookies (edit distance: 2)
+  Network.setCookies (edit distance: 3)
+  Network.getAllCookies (edit distance: 4)
+
+Tip: Use 'bdg cdp Network --list' to see all available methods
+
+Exit code: 81 (INVALID_ARGUMENTS)
+```
+
+<Tip>
+  Levenshtein distance algorithm finds closest matches within edit distance of 3
+</Tip>
+
+## Index vs Selector Errors
+
+bdg distinguishes between index-based and selector-based failures:
+
+### Selector Error (Element Never Existed)
+
+```bash
+bdg dom click "#missing-button"
+```
+
+```json
+{
+  "success": false,
+  "error": "Element not found: #missing-button",
+  "exitCode": 83,  // RESOURCE_NOT_FOUND
+  "suggestion": "Verify selector exists on page. Use 'bdg dom query \"#missing-button\"' to test selector."
+}
+```
+
+### Index Error (Element Became Stale)
+
+```bash
+bdg dom query "button"  # Caches nodeIds for indices 0, 1, 2
+# ... page navigates ...
+bdg dom click 0         # Index 0 nodeId is now stale
+```
+
+```json
+{
+  "success": false,
+  "error": "Element at index 0 not accessible",
+  "exitCode": 87,  // STALE_CACHE (not RESOURCE_NOT_FOUND)
+  "suggestion": "Re-run query to refresh cache. DOM was modified or page navigated."
+}
+```
+
+<Warning>
+  **87 (STALE_CACHE) is recoverable** - re-run query and retry. **83 (RESOURCE_NOT_FOUND) is not** - selector is wrong.
+</Warning>
+
+## Validation Errors
+
+bdg validates input before execution and provides specific error messages:
+
+```bash
+bdg dom scroll --down -50  # Negative scroll value
+```
+
+```json
+{
+  "success": false,
+  "error": "Invalid scroll amount: -50. Must be positive.",
+  "exitCode": 81,
+  "suggestion": "Use --up 50 to scroll upward, or --down 50 to scroll downward."
+}
+```
+
+```bash
+bdg network har /invalid/path
+```
+
+```json
+{
+  "success": false,
+  "error": "Permission denied: /invalid/path",
+  "exitCode": 82,
+  "suggestion": "Check file permissions or use '-' to output to stdout."
+}
+```
+
+## CDP Method Errors
+
+CDP errors are wrapped with context:
+
+```bash
+bdg cdp Network.setCookie --params '{"name":"test","value":"123","url":"invalid-url"}'
+```
+
+```json
+{
+  "success": false,
+  "error": "CDP error: Invalid URL",
+  "exitCode": 81,
+  "suggestion": "Ensure 'url' parameter is a valid URL with protocol (http:// or https://).",
+  "details": {
+    "method": "Network.setCookie",
+    "invalidParameter": "url",
+    "providedValue": "invalid-url"
+  }
+}
+```
+
+## Timeout Errors
+
+Timeout errors include duration information:
+
+```bash
+bdg cdp Runtime.evaluate --params '{"expression":"while(true){}"}'
+```
+
+```json
+{
+  "success": false,
+  "error": "CDP operation timed out after 30000ms",
+  "exitCode": 102,
+  "suggestion": "Operation exceeded timeout. Check for infinite loops or slow operations.",
+  "details": {
+    "method": "Runtime.evaluate",
+    "timeout": 30000
+  }
+}
+```
+
+## Error Handling Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always check exit codes">
+    Exit codes are more reliable than parsing error messages. Use numeric ranges for category detection.
+    
+    ```typescript
+    // Good
+    if (exitCode === 87) {
+      refreshCache();
+    }
+    
+    // Bad
+    if (error.includes('stale')) {
+      refreshCache();
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Use suggestions as recovery steps">
+    Suggestions include executable commands. Parse and run them directly.
+    
+    ```typescript
+    const result = await exec('bdg dom click "#btn"');
+    if (!result.success && result.suggestion) {
+      // Extract command from suggestion
+      const suggestedCmd = extractCommand(result.suggestion);
+      await exec(suggestedCmd);
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Implement exponential backoff for 100-109 codes">
+    Software errors (100-109) may be transient. Retry with increasing delays.
+    
+    ```typescript
+    async function retryWithBackoff(cmd: string, maxRetries = 3) {
+      for (let i = 0; i < maxRetries; i++) {
+        const result = await exec(cmd);
+        if (result.exitCode === 0) return result;
+        
+        if (result.exitCode >= 100 && result.exitCode <= 109) {
+          await sleep(Math.pow(2, i) * 1000);  // 1s, 2s, 4s
+          continue;
+        }
+        
+        // Non-retryable error
+        throw new Error(result.error);
+      }
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Don't retry 110-119 codes">
+    Internal software errors (110-119) indicate bugs. Report and escalate.
+    
+    ```typescript
+    if (exitCode >= 110 && exitCode <= 119) {
+      // Report bug, don't retry
+      reportBug({
+        error: result.error,
+        exitCode: result.exitCode,
+        command: cmd
+      });
+      throw new Error('Unrecoverable error');
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Parse JSON errors in try-catch">
+    When using `--json`, parse errors in try-catch to handle malformed output.
+    
+    ```typescript
+    try {
+      const result = JSON.parse(await exec('bdg dom query "button" --json'));
+      if (!result.success) {
+        handleError(result);
+      }
+    } catch (e) {
+      // JSON parse failed - likely stderr output
+      console.error('Non-JSON error:', e);
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Error Debugging
+
+For unexpected errors, use verbose mode:
+
+```bash
+bdg dom click "button" --json --verbose
+```
+
+Verbose mode includes additional context in `details`:
+
+```json
+{
+  "success": false,
+  "error": "Element not found: button",
+  "exitCode": 83,
+  "suggestion": "Verify selector exists on page.",
+  "details": {
+    "selector": "button",
+    "querySelector": "document.querySelector('button')",
+    "documentState": "complete",
+    "currentUrl": "https://example.com",
+    "timestamp": 1735689600000
+  }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Discovery Pattern" icon="magnifying-glass" href="/agents/discovery-pattern">
+    Learn how agents discover capabilities
+  </Card>
+  <Card title="Benchmarks" icon="chart-line" href="/agents/benchmarks">
+    See error handling in real debugging tasks
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/advanced/troubleshooting">
+    Common issues and solutions
+  </Card>
+</CardGroup>

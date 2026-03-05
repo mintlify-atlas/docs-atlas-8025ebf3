@@ -1,0 +1,271 @@
+---
+title: 'bdg status'
+description: 'Show active session status and collection statistics'
+---
+
+## Overview
+
+The `status` command displays information about the active session including process IDs, runtime duration, collected data counts, and Chrome diagnostics.
+
+## Syntax
+
+```bash
+bdg status [options]
+```
+
+## Options
+
+<ParamField path="--json" type="boolean" default="false">
+  Output as JSON for programmatic use
+  
+  ```bash
+  bdg status --json
+  ```
+</ParamField>
+
+<ParamField path="--verbose" type="boolean" default="false">
+  Show detailed Chrome diagnostics (process info, CDP connection details)
+  
+  ```bash
+  bdg status --verbose
+  ```
+</ParamField>
+
+## Examples
+
+### Basic Status
+
+```bash
+bdg status
+```
+
+**Output:**
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SESSION ACTIVE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Status:      Running
+Duration:    2m 34s
+Target:      https://example.com
+Title:       Example Domain
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+COLLECTED DATA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Network:     47 requests
+Console:     12 messages
+DOM:         Captured on session stop
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PROCESS INFO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BDG PID:     12345
+Chrome PID:  12346
+CDP Port:    9222
+```
+
+### Verbose Status
+
+```bash
+bdg status --verbose
+```
+
+**Additional output includes:**
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CHROME DIAGNOSTICS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+WebSocket:   ws://localhost:9222/devtools/page/ABC123...
+Target ID:   ABC123-DEF456-GHI789
+Page State:  loaded
+```
+
+### JSON Output
+
+```bash
+bdg status --json
+```
+
+**Output:**
+
+```json
+{
+  "version": "0.5.1",
+  "success": true,
+  "data": {
+    "active": true,
+    "sessionPid": 12345,
+    "chromePid": 12346,
+    "port": 9222,
+    "startTime": "2025-03-05T10:30:00.000Z",
+    "duration": 154000,
+    "targetId": "ABC123-DEF456-GHI789",
+    "webSocketDebuggerUrl": "ws://localhost:9222/devtools/page/ABC123...",
+    "activeTelemetry": ["dom", "network", "console"],
+    "activity": {
+      "network": 47,
+      "console": 12
+    },
+    "pageState": {
+      "url": "https://example.com",
+      "title": "Example Domain",
+      "loadState": "loaded"
+    }
+  }
+}
+```
+
+### No Active Session
+
+```bash
+bdg status
+```
+
+**Output:**
+
+```
+No active session.
+
+Start a session with: bdg <url>
+```
+
+**JSON Output:**
+
+```json
+{
+  "version": "0.5.1",
+  "success": true,
+  "data": {
+    "active": false,
+    "activity": null,
+    "pageState": null
+  }
+}
+```
+
+## Status Fields
+
+### Session Info
+
+- **Status**: Session state (`Running`)
+- **Duration**: Time elapsed since session start (e.g., `2m 34s`)
+- **Target**: Current page URL
+- **Title**: Current page title
+
+### Collected Data
+
+- **Network**: Number of network requests captured
+- **Console**: Number of console messages captured
+- **DOM**: Indicates DOM capture happens on session stop
+
+### Process Info
+
+- **BDG PID**: Browser Debugger daemon process ID
+- **Chrome PID**: Chrome browser process ID
+- **CDP Port**: Chrome DevTools Protocol debugging port
+
+### Chrome Diagnostics (Verbose)
+
+- **WebSocket**: CDP WebSocket connection URL
+- **Target ID**: Chrome target/page identifier
+- **Page State**: Page load state (`loading`, `loaded`, `networkIdle`)
+
+## Use Cases
+
+### Check Session Before Running Commands
+
+```bash
+# Verify session is active before querying
+if bdg status --json | jq -e '.data.active' > /dev/null; then
+  bdg dom query "button"
+else
+  echo "No active session. Starting one..."
+  bdg example.com
+fi
+```
+
+### Monitor Collection Progress
+
+```bash
+# Watch collection stats in real-time
+watch -n 2 'bdg status'
+
+# Or with jq for specific fields
+watch -n 2 'bdg status --json | jq ".data.activity"'
+```
+
+### Get Process IDs for System Monitoring
+
+```bash
+# Extract Chrome PID for resource monitoring
+CHROME_PID=$(bdg status --json | jq -r '.data.chromePid')
+ps -p $CHROME_PID -o %cpu,%mem,vsz
+
+# Kill Chrome manually if needed
+kill $CHROME_PID
+```
+
+### Debug Connection Issues
+
+```bash
+# Show full diagnostics for troubleshooting
+bdg status --verbose
+
+# Check CDP WebSocket connection
+bdg status --json | jq -r '.data.webSocketDebuggerUrl'
+```
+
+## Exit Codes
+
+<ResponseField name="0" type="SUCCESS">
+  Status retrieved successfully (even if no active session)
+</ResponseField>
+
+<ResponseField name="83" type="RESOURCE_NOT_FOUND">
+  Daemon not running (stale session files cleaned up)
+</ResponseField>
+
+<ResponseField name="110" type="SOFTWARE_ERROR">
+  Unexpected error while retrieving status
+</ResponseField>
+
+<Note>
+Exit code 0 doesn't mean a session is active - check the `active` field in output. Exit code 83 means the daemon isn't running (no session files found).
+</Note>
+
+## Related Commands
+
+<CardGroup cols={2}>
+  <Card title="bdg start" icon="play" href="/commands/start">
+    Start a new browser session
+  </Card>
+  <Card title="bdg peek" icon="eye" href="/commands/peek">
+    Preview collected data in detail
+  </Card>
+  <Card title="bdg stop" icon="stop" href="/commands/stop">
+    Stop session and save data
+  </Card>
+  <Card title="bdg cleanup" icon="broom" href="/commands/cleanup">
+    Clean up stale session files
+  </Card>
+</CardGroup>
+
+## Tips
+
+<Tip>
+**Automation**: Use `bdg status --json | jq -e '.data.active'` to check if a session exists before running commands. Exit code 0 = active, 1 = no session.
+</Tip>
+
+<Tip>
+**Debugging**: If `bdg status` shows no session but you expect one, run `bdg cleanup --force` to remove stale files, then start a fresh session.
+</Tip>
+
+<Warning>
+**Daemon Connection**: If the daemon crashed but left session files, `status` will detect the stale PID and automatically clean it up.
+</Warning>

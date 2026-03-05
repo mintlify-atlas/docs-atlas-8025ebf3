@@ -1,0 +1,197 @@
+---
+title: "bdg dom eval"
+description: "Execute JavaScript expressions in the page context"
+---
+
+## Overview
+
+Evaluate JavaScript code in the browser page context. Returns the result of the expression or script execution.
+
+## Syntax
+
+```bash
+bdg dom eval <script> [options]
+```
+
+## Arguments
+
+<ParamField path="script" type="string" required>
+  JavaScript expression or statement to execute (e.g., `"document.title"`, `"window.location.href"`)
+</ParamField>
+
+## Options
+
+<ParamField path="--json" type="flag">
+  Output as JSON with full Runtime.evaluate response
+</ParamField>
+
+## Output
+
+Returns the evaluated result. Objects are serialized to strings.
+
+### Human-readable format
+
+```bash
+$ bdg dom eval "document.title"
+Browser Debugger CLI
+
+$ bdg dom eval "document.querySelectorAll('button').length"
+3
+```
+
+### JSON format
+
+```json
+{
+  "version": "0.5.1",
+  "success": true,
+  "data": {
+    "result": "Browser Debugger CLI"
+  }
+}
+```
+
+## Examples
+
+### Get page properties
+
+```bash
+bdg dom eval "document.title"
+bdg dom eval "window.location.href"
+bdg dom eval "document.readyState"
+```
+
+### Query DOM
+
+```bash
+bdg dom eval "document.querySelector('h1').textContent"
+bdg dom eval "document.querySelectorAll('.error').length"
+```
+
+### Execute complex scripts
+
+```bash
+bdg dom eval '(() => {
+  const buttons = document.querySelectorAll("button");
+  return Array.from(buttons).map(b => b.textContent);
+})()'
+```
+
+### Check element state
+
+```bash
+bdg dom eval "document.querySelector('#submit-btn').disabled"
+bdg dom eval "document.querySelector('input').value"
+```
+
+## Shell quote handling
+
+JavaScript expressions with quotes require careful escaping:
+
+<CodeGroup>
+
+```bash Single quotes (recommended)
+bdg dom eval 'document.querySelector("h1").textContent'
+```
+
+```bash Double quotes
+bdg dom eval "document.querySelector('h1').textContent"
+```
+
+```bash Heredoc for complex scripts
+bdg dom eval "$(cat <<'EOF'
+(() => {
+  const el = document.querySelector("input");
+  return el ? el.value : null;
+})()
+EOF
+)"
+```
+
+</CodeGroup>
+
+<Warning>
+  If you see a SyntaxError, the shell may have stripped quotes. The error message shows the script as received to help diagnose escaping issues.
+</Warning>
+
+## Error messages
+
+When JavaScript execution fails, bdg provides context:
+
+```bash
+$ bdg dom eval "document.querySelector(input).value"
+Error: ReferenceError: input is not defined
+Script received: document.querySelector(input).value
+
+Shell quote damage detected:
+  querySelector(input) - quotes stripped by shell
+
+Try: bdg dom eval 'document.querySelector("input")'
+```
+
+## Common use cases
+
+### Extract data
+
+```bash
+# Get all link URLs
+bdg dom eval 'Array.from(document.querySelectorAll("a")).map(a => a.href)'
+
+# Get form data
+bdg dom eval 'Object.fromEntries(new FormData(document.querySelector("form")))'
+```
+
+### Check page state
+
+```bash
+# Scroll position
+bdg dom eval "window.scrollY"
+
+# Viewport size
+bdg dom eval '[window.innerWidth, window.innerHeight]'
+```
+
+### Modify page
+
+```bash
+# Scroll to element
+bdg dom eval 'document.querySelector("#footer").scrollIntoView()'
+
+# Set value
+bdg dom eval 'document.querySelector("#search").value = "test"'
+```
+
+## Return value limitations
+
+- Objects are serialized (not live references)
+- DOM nodes return `[object HTMLElement]` (use selectors instead)
+- Functions cannot be returned
+- Circular references may fail
+
+<Tip>
+  For element inspection, use [`bdg dom get`](/commands/dom/get) or [`bdg dom query`](/commands/dom/query) instead.
+</Tip>
+
+## Exit codes
+
+<ParamField path="0" type="number">
+  Success - script executed
+</ParamField>
+
+<ParamField path="81" type="number">
+  INVALID_ARGUMENTS - JavaScript syntax error
+</ParamField>
+
+<ParamField path="102" type="number">
+  CDP_TIMEOUT - CDP operation timed out
+</ParamField>
+
+<ParamField path="103" type="number">
+  SESSION_FILE_ERROR - session metadata missing
+</ParamField>
+
+## Related commands
+
+- [`bdg dom query`](/commands/dom/query) - Query DOM with CSS selectors
+- [`bdg dom get`](/commands/dom/get) - Get element details
+- [`bdg cdp Runtime.evaluate`](/commands/cdp/overview) - Raw CDP Runtime.evaluate access

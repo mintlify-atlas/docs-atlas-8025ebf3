@@ -1,0 +1,360 @@
+---
+title: "bdg dom a11y"
+description: "Inspect accessibility tree and query elements by role, name, or description"
+---
+
+## Overview
+
+Inspect the Chrome accessibility tree to find elements by semantic properties (role, name, description). Provides three core commands:
+
+- **tree**: Display full accessibility tree
+- **query**: Search by role/name/description patterns
+- **describe**: Get accessibility properties for CSS selector
+
+## Commands
+
+### bdg dom a11y tree
+
+Display the full accessibility tree for the current page.
+
+```bash
+bdg dom a11y tree [options]
+```
+
+#### Options
+
+<ParamField path="--json" type="flag">
+  Output full tree as JSON (for jq filtering)
+</ParamField>
+
+#### Examples
+
+```bash
+# Human-readable tree (first 50 nodes)
+bdg dom a11y tree
+
+# Full tree as JSON
+bdg dom a11y tree --json
+
+# Filter with jq
+bdg dom a11y tree --json | jq '.nodes[] | select(.role == "button")'
+bdg dom a11y tree --json | jq '[.nodes[] | select(.name | test("submit"; "i"))]'
+```
+
+#### Output format
+
+```text
+Accessibility Tree (50 nodes shown, use --json for complete output)
+
+[Document] "Page Title"
+  [Banner] "Site Header"
+    [Link] "Logo" (focusable)
+    [Navigation] "Main menu"
+      [Link] "Home" (focusable)
+      [Link] "About" (focusable)
+  [Main]
+    [Heading L1] "Welcome"
+    [Paragraph]
+    [Button] "Get Started" (focusable)
+```
+
+### bdg dom a11y query
+
+Query elements by accessibility properties using pattern matching.
+
+```bash
+bdg dom a11y query <pattern> [options]
+```
+
+#### Arguments
+
+<ParamField path="pattern" type="string" required>
+  Query pattern with field prefix: `role:button`, `name:Submit`, `description:text`
+  
+  Supports wildcards: `name:*search*`
+</ParamField>
+
+#### Options
+
+<ParamField path="--json" type="flag">
+  Output results as JSON
+</ParamField>
+
+#### Pattern syntax
+
+| Pattern | Description | Example |
+|---------|-------------|----------|
+| `role:<value>` | Filter by ARIA role | `role:button` |
+| `name:<value>` | Filter by accessible name | `name:Submit` |
+| `description:<value>` | Filter by description | `description:Click to submit` |
+| Wildcards | Match partial strings | `name:*search*` |
+| Combine | AND logic with comma | `role:button,name:Submit` |
+
+#### Examples
+
+```bash
+# Find all buttons
+bdg dom a11y query role:button
+
+# Find by accessible name
+bdg dom a11y query name:Submit
+
+# Find by description
+bdg dom a11y query description:"Click to submit"
+
+# Combine criteria (AND logic)
+bdg dom a11y query role:button,name:Submit
+
+# Wildcard search
+bdg dom a11y query name:*search*
+
+# JSON output
+bdg dom a11y query role:checkbox --json
+```
+
+#### Output
+
+```text
+Found 3 elements matching "role:button":
+
+[Button] "Submit Form" (focusable)
+[Button] "Cancel" (focusable)
+[Button] "Reset" (focusable, disabled)
+```
+
+### bdg dom a11y describe
+
+Get detailed accessibility properties for a specific element.
+
+```bash
+bdg dom a11y describe <selector> [options]
+```
+
+#### Arguments
+
+<ParamField path="selector" type="string" required>
+  CSS selector or numeric index from query results (0-based)
+</ParamField>
+
+#### Options
+
+<ParamField path="--json" type="flag">
+  Output as JSON with full accessibility node structure
+</ParamField>
+
+#### Examples
+
+```bash
+# By CSS selector
+bdg dom a11y describe "button[type='submit']"
+bdg dom a11y describe "#login-form"
+bdg dom a11y describe ".nav-link:first-child"
+
+# By cached index
+bdg dom query "button"
+bdg dom a11y describe 0
+
+# JSON output
+bdg dom a11y describe "#submit-btn" --json
+```
+
+#### Output
+
+```text
+Accessibility properties for: button[type='submit']
+
+Role: Button
+Name: "Submit Form"
+Description: "Submit the login form"
+Focusable: true
+Disabled: false
+
+DOM Context:
+  Tag: button
+  Classes: btn, btn-primary
+  Text: "Submit Form"
+```
+
+## Quick search shorthand
+
+The base `bdg dom a11y` command supports quick search patterns:
+
+```bash
+# Numeric index → describe
+bdg dom a11y 0
+
+# CSS selector → describe
+bdg dom a11y "#submit-btn"
+bdg dom a11y ".nav-link"
+
+# Pattern with ":" → query
+bdg dom a11y role:button
+bdg dom a11y name:Submit
+
+# Plain text → name search
+bdg dom a11y Submit
+# Equivalent to: bdg dom a11y query name:*Submit*
+```
+
+## Common workflows
+
+### Find and interact with button
+
+```bash
+# Step 1: Find submit button
+bdg dom a11y query role:button,name:Submit
+# [Button] "Submit Form" (focusable)
+
+# Step 2: Get CSS selector
+bdg dom query "button[type='submit']"
+# [0] <button.primary> "Submit Form"
+
+# Step 3: Click it
+bdg dom click 0
+```
+
+### Verify form accessibility
+
+```bash
+# Check form landmark
+bdg dom a11y query role:form
+
+# Verify all inputs have labels
+bdg dom a11y tree --json | jq '[.nodes[] | select(.role == "textbox") | select(.name == "")]'
+
+# Find unlabeled inputs (should be empty array)
+```
+
+### Navigate by headings
+
+```bash
+# List all headings
+bdg dom a11y query role:heading
+
+# Find specific heading level
+bdg dom a11y tree --json | jq '[.nodes[] | select(.role == "heading" and .properties.level == 2)]'
+```
+
+## JSON output for automation
+
+### Tree structure
+
+```json
+{
+  "version": "0.5.1",
+  "success": true,
+  "data": {
+    "root": {
+      "nodeId": 1,
+      "role": "document",
+      "name": "Page Title"
+    },
+    "nodes": [
+      {
+        "nodeId": 1,
+        "role": "document",
+        "name": "Page Title",
+        "children": [2, 3]
+      },
+      {
+        "nodeId": 2,
+        "role": "button",
+        "name": "Submit",
+        "focusable": true,
+        "backendDOMNodeId": 123
+      }
+    ],
+    "count": 2
+  }
+}
+```
+
+### Query result structure
+
+```json
+{
+  "version": "0.5.1",
+  "success": true,
+  "data": {
+    "pattern": "role:button",
+    "count": 3,
+    "nodes": [
+      {
+        "nodeId": 2,
+        "role": "button",
+        "name": "Submit",
+        "focusable": true
+      }
+    ]
+  }
+}
+```
+
+## Exit codes
+
+<ParamField path="0" type="number">
+  Success - tree retrieved or nodes found
+</ParamField>
+
+<ParamField path="81" type="number">
+  INVALID_ARGUMENTS - invalid query pattern syntax
+</ParamField>
+
+<ParamField path="83" type="number">
+  RESOURCE_NOT_FOUND - no elements match query
+</ParamField>
+
+<ParamField path="87" type="number">
+  STALE_CACHE - cached index invalid
+</ParamField>
+
+<ParamField path="102" type="number">
+  CDP_TIMEOUT - CDP operation timed out
+</ParamField>
+
+## Accessibility tree vs DOM
+
+The accessibility tree is a **semantic** representation of the page:
+
+| Aspect | Accessibility Tree | DOM Tree |
+|--------|-------------------|----------|
+| **Purpose** | Assistive technology | Browser rendering |
+| **Nodes** | Semantic roles only | All HTML elements |
+| **Filtering** | Ignores decorative elements | Includes everything |
+| **Names** | Computed accessible names | Raw text content |
+| **Properties** | Focusable, disabled, required | All HTML attributes |
+
+### When to use each
+
+**Use accessibility tree for:**
+- Finding interactive elements (buttons, inputs)
+- Testing screen reader experience
+- Semantic element discovery
+- Role-based automation
+
+**Use DOM tree for:**
+- Styling and layout debugging
+- Finding elements by class/ID
+- Inspecting raw HTML attributes
+- Custom data attributes
+
+## Common roles
+
+| Role | Element examples |
+|------|------------------|
+| `button` | `<button>`, `<input type="button">` |
+| `link` | `<a href="...">` |
+| `textbox` | `<input type="text">`, `<textarea>` |
+| `checkbox` | `<input type="checkbox">` |
+| `heading` | `<h1>` - `<h6>` |
+| `navigation` | `<nav>` |
+| `main` | `<main>` |
+| `form` | `<form>` |
+| `list` | `<ul>`, `<ol>` |
+| `listitem` | `<li>` |
+
+## Related commands
+
+- [`bdg dom query`](/commands/dom/query) - Find elements by CSS selector
+- [`bdg dom get`](/commands/dom/get) - Get semantic or raw element info
+- [`bdg dom form`](/guides/forms-and-interaction) - Discover form structure

@@ -1,0 +1,564 @@
+---
+title: 'Forms & Interaction'
+description: 'Fill forms, click buttons, press keys, and interact with page elements'
+---
+
+## Overview
+
+Browser Debugger CLI provides React-compatible form interaction capabilities:
+
+- Discover forms with semantic labels and validation state
+- Fill inputs with automatic event dispatching
+- Click buttons and elements
+- Press keys for keyboard navigation
+- Submit forms with smart waiting
+- Scroll to elements with lazy-load detection
+
+All interaction commands automatically wait for network stability after actions.
+
+## Form Discovery
+
+Discover forms on the page with complete field information:
+
+```bash
+# Auto-select most relevant form
+bdg dom form
+
+# Show all forms on page
+bdg dom form --all
+
+# Quick scan (names and types only)
+bdg dom form --brief
+
+# JSON output
+bdg dom form --json
+```
+
+### Human Output Example
+
+```sql
+FORMS DISCOVERED: 1
+══════════════════════════════════════════════════════════════════════
+
+Form: "Create Account" (step 2 of 3)
+──────────────────────────────────────────────────────────────────────
+   #  Type         Label                    Value                Status
+──────────────────────────────────────────────────────────────────────
+   0  email        Email address*           empty                required
+   1  password     Password*                empty                required
+   2  password     Confirm password*        empty                required
+   3  checkbox     Newsletter               unchecked            ok
+   4  checkbox     Terms & Conditions*      unchecked            required
+──────────────────────────────────────────────────────────────────────
+   5  button       Back                     (secondary)          enabled
+   6  button       Create Account           (primary)            enabled
+══════════════════════════════════════════════════════════════════════
+Summary: 0/5 fields filled | 3 required remaining | NOT ready
+
+Remaining:
+  bdg dom fill 0 "<value>"                   # Email address
+  bdg dom fill 1 "<value>"                   # Password
+  bdg dom click 4                            # Terms & Conditions
+```
+
+<Note>
+  Form discovery uses 0-based indices that can be used directly with `fill`, `click`, and `pressKey` commands.
+</Note>
+
+### Key Features
+
+- **Semantic labels**: Extracted from `<label>`, `aria-label`, `placeholder`, etc.
+- **State detection**: Shows current values and checked/unchecked state
+- **Validation**: Detects HTML5 and custom validation errors
+- **Custom components**: Flags non-native inputs with interaction warnings
+- **Ready-to-use commands**: Shows exact commands to fill each field
+
+## Fill Form Fields
+
+Fill inputs with React-compatible events:
+
+```bash
+# Fill by selector
+bdg dom fill "#username" "admin"
+
+# Fill by index from form discovery
+bdg dom fill 0 "user@example.com"
+
+# Fill without blur (keeps focus)
+bdg dom fill "#search" "query" --no-blur
+
+# Skip network stability wait
+bdg dom fill "#fast-field" "value" --no-wait
+
+# Fill specific match when multiple elements
+bdg dom fill "input[type='text']" "value" --index 1
+```
+
+<Tabs>
+  <Tab title="By Selector">
+    ```bash
+    bdg dom fill "#email" "user@example.com"
+    ```
+  </Tab>
+  <Tab title="By Index">
+    ```bash
+    # Query or discover form first
+    bdg dom form
+    
+    # Fill by index (0-based)
+    bdg dom fill 0 "user@example.com"
+    ```
+  </Tab>
+  <Tab title="Multiple Matches">
+    ```bash
+    # Use --index to select which element
+    bdg dom fill "input.text-field" "value" --index 2
+    ```
+  </Tab>
+</Tabs>
+
+### Fill Options
+
+| Option | Description | Default |
+|--------|-------------|--------|
+| `--no-blur` | Keep focus on element | false (blur after fill) |
+| `--no-wait` | Skip network stability check | false (wait for stability) |
+| `--index <n>` | Element index for multiple matches | 0 |
+
+### React Compatibility
+
+The fill command dispatches proper React events:
+
+1. Focus event
+2. Input event (for each character)
+3. Change event
+4. Blur event (unless `--no-blur`)
+
+This ensures React state is properly updated.
+
+## Click Elements
+
+Click buttons, links, and other elements:
+
+```bash
+# Click by selector
+bdg dom click "#login-btn"
+
+# Click by index
+bdg dom click 0
+
+# Click specific match
+bdg dom click "button.submit" --index 2
+
+# Skip network stability wait
+bdg dom click "#fast-btn" --no-wait
+```
+
+### Click Options
+
+| Option | Description | Default |
+|--------|-------------|--------|
+| `--no-wait` | Skip network stability check | false (wait for stability) |
+| `--index <n>` | Element index for multiple matches | 0 |
+
+<Warning>
+  Click waits for network stability by default. Use `--no-wait` for rapid interactions that don't trigger network requests.
+</Warning>
+
+## Press Keys
+
+Press keyboard keys on elements for navigation and shortcuts:
+
+```bash
+# Press Enter on input (TodoMVC pattern)
+bdg dom pressKey ".new-todo" Enter
+
+# Tab to next field
+bdg dom pressKey "input" Tab
+
+# Navigate autocomplete
+bdg dom pressKey "#search" ArrowDown --times 3
+
+# Close modal
+bdg dom pressKey "body" Escape
+
+# Select all (Ctrl+A)
+bdg dom pressKey "textarea" a --modifiers ctrl
+
+# Press by index
+bdg dom pressKey 0 Enter
+```
+
+### Supported Keys
+
+**Navigation:**
+- `Enter`, `Tab`, `Escape`, `Space`, `Backspace`, `Delete`
+
+**Arrows:**
+- `ArrowUp`, `ArrowDown`, `ArrowLeft`, `ArrowRight`
+
+**Page:**
+- `Home`, `End`, `PageUp`, `PageDown`
+
+**Letters:**
+- `a` through `z`
+
+**Digits:**
+- `0` through `9`
+
+**Function:**
+- `F1` through `F12`
+
+### Press Key Options
+
+| Option | Description | Default |
+|--------|-------------|--------|
+| `--times <n>` | Press key multiple times | 1 |
+| `--modifiers <mods>` | Modifier keys: shift,ctrl,alt,meta | none |
+| `--no-wait` | Skip network stability check | false |
+| `--index <n>` | Element index for multiple matches | 0 |
+
+### Modifier Keys
+
+```bash
+# Ctrl+A (Select all)
+bdg dom pressKey "textarea" a --modifiers ctrl
+
+# Shift+Tab (Previous field)
+bdg dom pressKey "input" Tab --modifiers shift
+
+# Ctrl+Shift+K (Complex shortcut)
+bdg dom pressKey "body" k --modifiers ctrl,shift
+
+# Meta+V (Cmd+V on Mac)
+bdg dom pressKey "input" v --modifiers meta
+```
+
+## Submit Forms
+
+Submit forms with smart waiting for completion:
+
+```bash
+# Submit form (waits for network idle)
+bdg dom submit "#login-form"
+
+# Wait for page navigation
+bdg dom submit "#login-form" --wait-navigation
+
+# Custom network idle timeout
+bdg dom submit "#login-form" --wait-network 2000
+
+# Custom total timeout
+bdg dom submit "#login-form" --timeout 10000
+
+# Submit by index
+bdg dom submit 6
+```
+
+### Submit Options
+
+| Option | Description | Default |
+|--------|-------------|--------|
+| `--wait-navigation` | Wait for page navigation | false |
+| `--wait-network <ms>` | Network idle timeout | 1000ms |
+| `--timeout <ms>` | Maximum wait time | 10000ms |
+| `--index <n>` | Element index for multiple matches | 0 |
+
+<Note>
+  Submit automatically waits for either navigation or network idle, whichever comes first. Use `--wait-navigation` to force navigation wait.
+</Note>
+
+## Scroll Page
+
+Scroll to elements or by offset with lazy-load detection:
+
+```bash
+# Scroll element into view
+bdg dom scroll "footer"
+
+# Scroll down by pixels
+bdg dom scroll --down 500
+
+# Scroll to page bottom
+bdg dom scroll --bottom
+
+# Scroll to page top
+bdg dom scroll --top
+
+# Scroll to nth match
+bdg dom scroll "li.item" --index 5
+
+# Skip lazy-load wait
+bdg dom scroll "footer" --no-wait
+```
+
+### Scroll Options
+
+| Option | Description |
+|--------|-------------|
+| `--down <pixels>` | Scroll down by pixels |
+| `--up <pixels>` | Scroll up by pixels |
+| `--left <pixels>` | Scroll left by pixels |
+| `--right <pixels>` | Scroll right by pixels |
+| `--top` | Scroll to page top |
+| `--bottom` | Scroll to page bottom |
+| `--index <n>` | Element index for multiple matches |
+| `--no-wait` | Skip lazy-load detection |
+
+<Warning>
+  By default, scroll waits for lazy-loaded content to stabilize. Use `--no-wait` to skip this check.
+</Warning>
+
+## Complete Form Workflow
+
+<Steps>
+  <Step title="Discover Form Structure">
+    ```bash
+    bdg dom form
+    ```
+    
+    Output shows all fields with indices:
+    ```sql
+    0  email        Email address*           empty
+    1  password     Password*                empty
+    2  checkbox     Terms & Conditions*      unchecked
+    3  button       Submit                   enabled
+    ```
+  </Step>
+  
+  <Step title="Fill Required Fields">
+    ```bash
+    bdg dom fill 0 "user@example.com"
+    bdg dom fill 1 "SecurePass123"
+    bdg dom click 2  # Accept terms
+    ```
+  </Step>
+  
+  <Step title="Check Form Progress">
+    ```bash
+    bdg dom form
+    ```
+    
+    Verify all required fields are filled.
+  </Step>
+  
+  <Step title="Submit Form">
+    ```bash
+    bdg dom click 3  # Click submit button
+    # OR
+    bdg dom submit "#login-form"
+    ```
+  </Step>
+  
+  <Step title="Verify Success">
+    ```bash
+    bdg console --level error
+    bdg network list --preset errors
+    ```
+  </Step>
+</Steps>
+
+## Advanced Patterns
+
+### TodoMVC Pattern (Enter to Submit)
+
+```bash
+# Add todo with Enter key
+bdg dom fill ".new-todo" "Buy groceries"
+bdg dom pressKey ".new-todo" Enter
+
+# Add another
+bdg dom fill ".new-todo" "Walk dog"
+bdg dom pressKey ".new-todo" Enter
+```
+
+### Multi-Step Form
+
+```bash
+# Step 1
+bdg dom form
+bdg dom fill 0 "value1"
+bdg dom fill 1 "value2"
+bdg dom click 5  # Next button
+
+# Wait for page to load
+bdg status
+
+# Step 2
+bdg dom form
+bdg dom fill 0 "value3"
+bdg dom click 3  # Submit
+```
+
+### Autocomplete Selection
+
+```bash
+# Type in search
+bdg dom fill "#search" "java"
+
+# Navigate dropdown with arrow keys
+bdg dom pressKey "#search" ArrowDown --times 2
+
+# Select with Enter
+bdg dom pressKey "#search" Enter
+```
+
+### Dynamic Forms
+
+```bash
+# Fill initial fields
+bdg dom fill "#country" "USA"
+
+# Wait for dynamic field to appear
+bdg dom query "#state"
+
+# Fill dynamic field
+bdg dom fill "#state" "California"
+```
+
+## Network Stability
+
+All interaction commands wait for network stability by default:
+
+1. **No in-flight requests** for 150ms
+2. **No DOM mutations** for 200ms
+3. **Maximum wait** of 2 seconds
+
+This ensures the page is stable after interactions.
+
+### Disable Stability Wait
+
+Use `--no-wait` when you need faster interactions:
+
+```bash
+# Rapid typing without waiting
+bdg dom fill "#field1" "value1" --no-wait
+bdg dom fill "#field2" "value2" --no-wait
+bdg dom fill "#field3" "value3" --no-wait
+
+# Then wait manually
+bdg status
+```
+
+## Tips and Best Practices
+
+<Tabs>
+  <Tab title="Use Form Discovery">
+    Always start with `bdg dom form` to get:
+    - Field indices for easier interaction
+    - Validation state
+    - Required vs optional fields
+    - Current values
+    
+    ```bash
+    bdg dom form
+    ```
+  </Tab>
+  
+  <Tab title="Index vs Selector">
+    Use indices when possible:
+    ```bash
+    # Preferred (from form discovery)
+    bdg dom fill 0 "value"
+    
+    # Alternative (when index not available)
+    bdg dom fill "#email" "value"
+    ```
+  </Tab>
+  
+  <Tab title="Check Progress">
+    Verify form state before submission:
+    ```bash
+    bdg dom form
+    bdg console --level error
+    ```
+  </Tab>
+  
+  <Tab title="Handle Errors">
+    Check for validation errors:
+    ```bash
+    bdg dom submit "#form"
+    bdg console --level error
+    bdg dom form  # Re-check validation state
+    ```
+  </Tab>
+</Tabs>
+
+## Troubleshooting
+
+### Element Not Found
+
+```bash
+# Query to verify element exists
+bdg dom query "selector"
+
+# Check if element is visible
+bdg dom get "selector" --raw
+```
+
+### Fill Not Working
+
+```bash
+# Verify element is fillable
+bdg dom get "selector" --raw
+
+# Check element type and attributes
+bdg dom form  # For form fields
+```
+
+### Submit Not Completing
+
+```bash
+# Check console for errors
+bdg console --level error
+
+# Check network for failed requests
+bdg network list --preset errors
+
+# Increase timeout
+bdg dom submit "#form" --timeout 20000
+```
+
+## JSON Output
+
+All interaction commands support `--json` output:
+
+```bash
+bdg dom form --json
+bdg dom fill "input" "value" --json
+bdg dom click "button" --json
+bdg dom submit "form" --json
+```
+
+### Programmatic Usage
+
+```bash
+# Check if form is ready
+bdg dom form --json | jq '.data.forms[0].summary.readyToSubmit'
+
+# Get required fields
+bdg dom form --json | jq '.data.forms[0].fields[] | select(.required)'
+
+# Verify fill succeeded
+bdg dom fill "input" "value" --json | jq '.success'
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="DOM Inspection" icon="code" href="/guides/dom-inspection">
+    Query and inspect page elements
+  </Card>
+  
+  <Card title="Screenshots" icon="camera" href="/guides/screenshots">
+    Capture form states and interactions
+  </Card>
+  
+  <Card title="Console Debugging" icon="terminal" href="/guides/console-debugging">
+    Debug form submission errors
+  </Card>
+  
+  <Card title="API Reference" icon="book" href="/commands/dom/fill">
+    Complete interaction command reference
+  </Card>
+</CardGroup>

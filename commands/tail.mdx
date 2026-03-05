@@ -1,0 +1,299 @@
+---
+title: 'bdg tail'
+description: 'Continuously monitor session data in real-time'
+---
+
+## Overview
+
+Continuously monitor session data with automatic updates. Similar to Unix `tail -f`, this command refreshes the display at regular intervals to show the latest network requests and console messages.
+
+## Syntax
+
+```bash
+bdg tail [options]
+```
+
+## Options
+
+<ParamField path="--last" type="number" default="10">
+  Number of items to display. Valid range: 1-1000.
+  
+  ```bash
+  bdg tail --last 25
+  ```
+</ParamField>
+
+<ParamField path="--interval" type="number" default="1000">
+  Update interval in milliseconds. Valid range: 100-60000 (0.1s to 60s).
+  
+  ```bash
+  bdg tail --interval 2000  # Update every 2 seconds
+  bdg tail --interval 500   # Update twice per second
+  ```
+</ParamField>
+
+<ParamField path="--network" type="boolean" default="false">
+  Show only network requests.
+  
+  ```bash
+  bdg tail --network
+  ```
+</ParamField>
+
+<ParamField path="--console" type="boolean" default="false">
+  Show only console messages.
+  
+  ```bash
+  bdg tail --console
+  ```
+</ParamField>
+
+<ParamField path="--verbose" type="boolean" default="false">
+  Use verbose output with full URLs and formatting.
+  
+  ```bash
+  bdg tail --verbose
+  bdg tail -v
+  ```
+</ParamField>
+
+<ParamField path="--json" type="boolean" default="false">
+  Output as JSON instead of human-readable format.
+  
+  ```bash
+  bdg tail --json
+  ```
+  
+  <Info>JSON mode outputs the same format as `bdg peek --json` but updates continuously.</Info>
+</ParamField>
+
+## Output Format
+
+### Human-Readable (Default)
+
+The display refreshes automatically, clearing the screen with each update:
+
+**Compact format** (default):
+```text
+NETWORK (5)
+  DOC  200  https://example.com/
+  XHR  200  /api/users
+  XHR  200  /api/posts
+  SCR  200  /bundle.js
+  CSS  200  /styles.css
+
+CONSOLE (3)
+  [log]    Application started
+  [log]    User logged in
+  [warn]   Deprecated API usage
+
+Viewed at: 2025-11-06T12:00:05.123Z
+
+Following preview... Press Ctrl+C to stop
+```
+
+**Verbose format** (`--verbose`):
+```text
+NETWORK REQUESTS (5)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  [Document]     200  https://example.com/
+  [XHR]          200  https://example.com/api/users
+  [XHR]          200  https://example.com/api/posts
+  [Script]       200  https://example.com/bundle.js
+  [Stylesheet]   200  https://example.com/styles.css
+
+CONSOLE MESSAGES (3)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  [log]    Application started
+  [log]    User logged in
+  [warn]   Deprecated API usage
+
+Viewed at: 2025-11-06T12:00:05.123Z
+
+Following preview... Press Ctrl+C to stop
+```
+
+### JSON Format
+
+Outputs the same JSON structure as [`bdg peek`](/commands/peek), refreshing at the specified interval:
+
+```json
+{
+  "version": "0.5.1",
+  "success": true,
+  "timestamp": "2025-11-06T12:00:00.000Z",
+  "duration": 45230,
+  "target": {
+    "url": "http://localhost:3000",
+    "title": "Example Page"
+  },
+  "data": {
+    "preview": {
+      "data": {
+        "network": [...],
+        "console": [...]
+      }
+    }
+  }
+}
+```
+
+## Examples
+
+### Basic Usage
+
+Start monitoring with defaults (last 10 items, update every second):
+```bash
+bdg tail
+```
+
+Show last 50 items:
+```bash
+bdg tail --last 50
+```
+
+Update every 2 seconds:
+```bash
+bdg tail --interval 2000
+```
+
+### Filter by Data Type
+
+Monitor only network traffic:
+```bash
+bdg tail --network
+```
+
+Monitor only console output:
+```bash
+bdg tail --console
+```
+
+### High-Frequency Updates
+
+Update twice per second (500ms interval):
+```bash
+bdg tail --interval 500
+```
+
+Fast updates with more items:
+```bash
+bdg tail --interval 250 --last 100
+```
+
+### Verbose Monitoring
+
+Watch with full details:
+```bash
+bdg tail --verbose
+```
+
+Verbose network monitoring:
+```bash
+bdg tail --verbose --network --last 25
+```
+
+### JSON Streaming
+
+Stream JSON output for processing:
+```bash
+bdg tail --json
+```
+
+Stream with custom interval:
+```bash
+bdg tail --json --interval 5000  # Update every 5 seconds
+```
+
+## Behavior
+
+### Auto-Refresh
+
+- Screen clears before each update
+- Timestamp shows when the data was last refreshed
+- Updates continue until interrupted with `Ctrl+C`
+
+### Error Handling
+
+If the daemon connection is lost during monitoring:
+
+**Follow mode** (default):
+- Retries connection automatically
+- Continues retrying until successful or interrupted
+- Uses the interval setting as retry delay
+
+**Interactive mode** (`--json` not set):
+- Shows error message
+- Exits with appropriate exit code
+
+### Signal Handling
+
+Graceful shutdown on `Ctrl+C`:
+```text
+Following preview... Press Ctrl+C to stop
+^C
+Stopped following preview
+```
+
+## Comparison with `bdg peek --follow`
+
+Both commands provide continuous monitoring, with subtle differences:
+
+| Feature | `bdg tail` | `bdg peek --follow` |
+|---------|-----------|--------------------|
+| **Primary use** | Dedicated monitoring | Preview with optional follow |
+| **Interval control** | `--interval` flag | Fixed 1000ms |
+| **Semantics** | Unix-style tail | Peek with live updates |
+| **Resource type filter** | ❌ Not available | ✅ `--type` flag |
+| **DOM data** | ❌ Not available | ✅ `--dom` flag |
+
+<Tip>
+  Use `bdg tail` for simple continuous monitoring. Use `bdg peek --follow` when you need resource type filtering or DOM data.
+</Tip>
+
+## Exit Codes
+
+<ParamField path="0" type="SUCCESS">
+  Command completed successfully (user interrupted with Ctrl+C).
+</ParamField>
+
+<ParamField path="81" type="INVALID_ARGUMENTS">
+  Invalid option value.
+  
+  **Common causes:**
+  - `--last` value outside range 1-1000
+  - `--interval` value outside range 100-60000
+</ParamField>
+
+<ParamField path="83" type="RESOURCE_NOT_FOUND">
+  No active session found.
+  
+  **Solution:** Start a session first with `bdg <url>`
+</ParamField>
+
+<ParamField path="101" type="CDP_CONNECTION_FAILURE">
+  Cannot connect to daemon (in non-follow scenarios).
+  
+  **Solution:** Check session status with `bdg status`
+</ParamField>
+
+## Related Commands
+
+- [`bdg peek`](/commands/peek) - One-time preview with filtering options
+- [`bdg details`](/commands/details) - Get detailed information for specific items
+- [`bdg console`](/commands/console) - Smart console message inspection
+- [`bdg network list`](/commands/network/list) - Enhanced network request filtering
+
+## Tips
+
+<Tip>
+  Use `--interval 250` for high-frequency monitoring during rapid page interactions.
+</Tip>
+
+<Tip>
+  Combine with `--verbose` to see full URLs and resource types during development: `bdg tail --verbose --interval 2000`
+</Tip>
+
+<Warning>
+  Low interval values (< 500ms) may cause screen flicker. Use the minimum interval that meets your monitoring needs.
+</Warning>

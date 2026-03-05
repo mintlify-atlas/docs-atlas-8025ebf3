@@ -1,0 +1,449 @@
+---
+title: Architecture
+description: Deep dive into bdg's daemon-first architecture and IPC communication
+---
+
+## Overview
+
+Browser Debugger CLI uses a **daemon-first, 3-process architecture** that enables fast command execution, persistent CDP connections, and reliable state management.
+
+```
+┌─────────────┐         ┌──────────────────┐         ┌─────────────────┐
+│             │  Unix   │                  │  stdin  │                 │
+│ CLI Command │ Socket  │  Daemon (IPC     │ ───────>│  Worker Process │
+│             │ ──────> │   Server)        │         │  (CDP Handler)  │
+│             │         │                  │<─────── │                 │
+└─────────────┘         └──────────────────┘  stdout └─────────────────┘
+                                 │                            │
+                                 │                            │
+                                 └────────────────────────────┘
+                            Request/Response Matching
+                                (via requestId)
+```
+
+## Three-Process Model
+
+### CLI Process
+
+**Lifecycle**: Ephemeral (exits after command)
+
+**Responsibilities**:
+- Parse command-line arguments
+- Connect to daemon via Unix socket
+- Send IPC requests
+- Format and display responses
+- Exit with appropriate exit code
+
+**Entry Point**: `src/index.ts`
+
+```typescript
+// CLI command flow
+main()
+  ├─ Check if daemon running (PID file)
+  ├─ Launch daemon if needed
+  ├─ Parse CLI arguments (Commander.js)
+  ├─ Send IPC request via Unix socket
+  ├─ Display formatted response
+  └─ Exit (0 for success, 80-119 for errors)
+```
+
+### Daemon Process
+
+**Lifecycle**: Long-running background process
+
+**Responsibilities**:
+- IPC server on Unix socket (`~/.bdg/daemon.sock`)
+- Spawn and manage worker process
+- Route commands between CLI and worker
+- Match requests/responses by `requestId`
+- Handle timeouts (10s default)
+
+**Entry Point**: `src/daemon.ts`
+
+```typescript
+// Daemon IPC flow
+IPCServer.start()
+  ├─ Create Unix socket at ~/.bdg/daemon.sock
+  ├─ Write daemon.pid file
+  ├─ Listen for client connections
+  ├─ Spawn worker process on session start
+  ├─ Forward CLI requests → worker stdin
+  ├─ Forward worker stdout → CLI socket
+  └─ Match responses via requestId
+```
+
+**Key File**: `src/daemon/ipcServer.ts`
+
+### Worker Process
+
+**Lifecycle**: Long-running (per session)
+
+**Responsibilities**:
+- Launch Chrome browser
+- Establish CDP WebSocket connection
+- Execute CDP commands
+- Collect telemetry (network, console, DOM)
+- Respond to IPC commands via stdin/stdout
+
+**Entry Point**: `src/daemon/worker.ts`
+
+```typescript
+// Worker initialization
+worker.main()
+  ├─ Launch Chrome with --remote-debugging-port
+  ├─ Connect to CDP WebSocket
+  ├─ Activate collectors (network, console, DOM)
+  ├─ Send worker_ready signal to daemon
+  ├─ Listen for commands on stdin
+  └─ Execute CDP operations
+```
+
+**Key File**: `src/daemon/worker.ts`
+
+## Communication Protocols
+
+### IPC Protocol (CLI ↔ Daemon)
+
+**Transport**: Unix domain socket  
+**Format**: JSONL (newline-delimited JSON)  
+**Location**: `~/.bdg/daemon.sock`
+
+**Request Example**:
+```json
+{"type":"dom_query_request","sessionId":"uuid","selector":"button"}
+```
+
+**Response Example**:
+```json
+{"type":"dom_query_response","sessionId":"uuid","status":"ok","data":{...}}
+```
+
+**Defined in**: `src/ipc/types.ts`
+
+### Worker IPC (Daemon ↔ Worker)
+
+**Transport**: stdin/stdout pipes  
+**Format**: JSONL
+
+**Request from Daemon**:
+```json
+{"type":"dom_query_request","requestId":"dom_query_123_abc","selector":"button"}
+```
+
+**Response from Worker**:
+```json
+{"type":"dom_query_response","requestId":"dom_query_123_abc","success":true,"data":{...}}
+```
+
+**Defined in**: `src/daemon/workerIpc.ts`
+
+### CDP Protocol (Worker ↔ Chrome)
+
+**Transport**: WebSocket  
+**Format**: JSON-RPC 2.0  
+**URL**: `ws://localhost:9222/devtools/page/<targetId>`
+
+**Command Example**:
+```json
+{"id":1,"method":"DOM.querySelectorAll","params":{"nodeId":1,"selector":"button"}}
+```
+
+**Event Example**:
+```json
+{"method":"Network.requestWillBeSent","params":{...}}
+```
+
+**Implementation**: `src/connection/cdp.ts`
+
+## Request/Response Matching
+
+### Request ID Flow
+
+1. **CLI** sends request with `sessionId` (for logging)
+2. **Daemon** generates unique `requestId` and stores pending request
+3. **Worker** receives `requestId`, executes command, echoes in response
+4. **Daemon** matches `requestId` to find original client socket
+5. **CLI** receives response via socket
+
+```typescript
+// Daemon generates unique requestId
+const requestId = `dom_query_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+// Store pending request with timeout
+this.pendingRequests.set(requestId, {
+  socket,
+  sessionId: request.sessionId,
+  timeout: setTimeout(() => {
+    // Timeout after 10s
+    this.pendingRequests.delete(requestId);
+    socket.write(JSON.stringify({
+      type: 'dom_query_response',
+      status: 'error',
+      error: 'Worker response timeout (10s)'
+    }) + '\n');
+  }, 10000)
+});
+```
+
+**See**: `src/daemon/handlers/pendingRequests.ts`
+
+## CDP Connection Management
+
+### Connection Lifecycle
+
+```typescript
+// Worker establishes persistent connection
+const cdp = new CDPConnection();
+await cdp.connect(chromeMetadata.webSocketDebuggerUrl);
+
+// Enable required domains
+await cdp.send('Page.enable');
+await cdp.send('Network.enable');
+await cdp.send('Runtime.enable');
+await cdp.send('DOM.enable');
+
+// Subscribe to events
+cdp.on('Network.requestWillBeSent', (params) => {
+  telemetry.recordNetworkRequest(params);
+});
+
+cdp.on('Runtime.consoleAPICalled', (params) => {
+  telemetry.recordConsoleMessage(params);
+});
+```
+
+**Key Features**:
+- Single persistent WebSocket connection per session
+- Automatic keepalive (ping/pong)
+- Request/response correlation via message IDs
+- Event subscription system
+- Graceful error handling
+
+**Implementation**: `src/connection/cdp.ts`
+
+### CDP Message Flow
+
+```
+Worker Process
+  ├─ Send CDP command: cdp.send('DOM.querySelectorAll', params)
+  │   └─> WebSocket: {"id": 42, "method": "DOM.querySelectorAll", "params": {...}}
+  │
+  ├─ Receive CDP response
+  │   <─ WebSocket: {"id": 42, "result": {...}}
+  │   └─ Resolve promise with result
+  │
+  └─ Receive CDP events
+      <─ WebSocket: {"method": "Network.requestWillBeSent", "params": {...}}
+      └─ Notify event handlers
+```
+
+## Telemetry Collection
+
+### Network Collector
+
+**Activation**: `src/telemetry/network.ts`
+
+```typescript
+startNetworkCollection(cdp)
+  ├─ Enable Network domain
+  ├─ Subscribe to events:
+  │   ├─ Network.requestWillBeSent
+  │   ├─ Network.responseReceived
+  │   ├─ Network.loadingFinished
+  │   └─ Network.loadingFailed
+  └─ Store in memory arrays
+```
+
+**Features**:
+- Captures all HTTP requests/responses
+- Records headers, bodies, timing
+- Tracks request/response pairing
+- HAR export support
+
+### Console Collector
+
+**Activation**: `src/telemetry/console.ts`
+
+```typescript
+startConsoleCollection(cdp)
+  ├─ Enable Runtime and Log domains
+  ├─ Subscribe to events:
+  │   ├─ Runtime.consoleAPICalled
+  │   └─ Log.entryAdded
+  └─ Store console messages
+```
+
+**Features**:
+- Captures console.log, warn, error
+- Expands object arguments
+- Tracks source location
+- Deduplication for smart output
+
+### DOM Collector
+
+**Activation**: `src/telemetry/dom.ts`
+
+```typescript
+prepareDOMCollection(cdp)
+  ├─ Enable DOM domain
+  └─ Snapshot captured on session stop:
+      ├─ Full DOM tree
+      ├─ Accessibility tree
+      └─ Computed styles (optional)
+```
+
+**Note**: DOM data is captured as a snapshot at session end, not streamed.
+
+## Session Files
+
+### File Locations
+
+All session files are stored in `~/.bdg/`:
+
+| File | Created By | Purpose |
+|------|------------|---------|
+| `daemon.sock` | Daemon | Unix socket for IPC |
+| `daemon.pid` | Daemon | Daemon process ID |
+| `daemon.lock` | CLI | Atomic lock during daemon startup |
+| `session.pid` | Worker | Worker process ID |
+| `session.meta.json` | Worker | Session metadata (Chrome PID, port, target) |
+| `session.json` | Worker | Final output (written on stop only) |
+| `chrome-profile/` | Worker | Chrome user data directory |
+
+### Session Metadata Format
+
+**File**: `~/.bdg/session.meta.json`
+
+```json
+{
+  "bdgPid": 12345,
+  "chromePid": 12346,
+  "startTime": "2025-03-05T21:00:00.000Z",
+  "port": 9222,
+  "targetId": "ABC123",
+  "webSocketDebuggerUrl": "ws://localhost:9222/devtools/page/ABC123",
+  "activeTelemetry": ["network", "console", "dom"]
+}
+```
+
+**Type Definition**: `src/session/metadata.ts`
+
+## Execution Flow: `bdg localhost:3000`
+
+<Steps>
+  <Step title="CLI Entry">
+    - Parse arguments with Commander.js
+    - Check if daemon is running
+    - Launch daemon if needed (detached process)
+  </Step>
+
+  <Step title="Daemon Activation">
+    - Create Unix socket at `~/.bdg/daemon.sock`
+    - Write PID file
+    - Listen for IPC connections
+  </Step>
+
+  <Step title="Session Start Request">
+    - CLI connects to daemon socket
+    - Sends `start_session_request`
+    - Daemon spawns worker process
+  </Step>
+
+  <Step title="Worker Initialization">
+    - Launch Chrome with remote debugging
+    - Connect to CDP WebSocket
+    - Enable telemetry collectors
+    - Send `worker_ready` signal
+  </Step>
+
+  <Step title="Response & Exit">
+    - Daemon forwards metadata to CLI
+    - CLI displays session info
+    - CLI exits (0)
+    - Worker continues in background
+  </Step>
+</Steps>
+
+**Timing**: Typically 1-5 seconds depending on Chrome startup and page load.
+
+**Full Details**: `docs/architecture/BDG_EXECUTION_FLOW.md` in source repo
+
+## Performance Optimizations
+
+### Daemon Persistence
+
+- Daemon stays alive across commands
+- No spawn overhead for subsequent commands
+- ~100ms saved per command
+
+### Worker Persistence
+
+- Single worker per session
+- Persistent CDP connection
+- Stable DOM nodeIds (index-based operations)
+- No reconnection overhead
+
+### Unix Sockets
+
+- Fast local IPC (no TCP overhead)
+- JSONL streaming protocol
+- Low latency request/response
+
+### Event Filtering
+
+- Only subscribe to needed CDP events
+- Reduce data processing overhead
+- Skip irrelevant events
+
+## Adding New Commands
+
+Follow the bidirectional IPC pattern:
+
+<Steps>
+  <Step title="Define Worker Types">
+    Add request/response types in `src/daemon/workerIpc.ts`
+  </Step>
+
+  <Step title="Define Client Types">
+    Add request/response types in `src/ipc/types.ts`
+  </Step>
+
+  <Step title="Implement Worker Handler">
+    Add handler in `src/daemon/worker.ts` to execute CDP commands
+  </Step>
+
+  <Step title="Implement Daemon Forwarding">
+    Add request/response forwarding in `src/daemon/ipcServer.ts`
+  </Step>
+
+  <Step title="Implement Client Helper">
+    Add IPC client function in `src/ipc/client.ts`
+  </Step>
+
+  <Step title="Add CLI Command">
+    Create command handler in `src/commands/`
+  </Step>
+</Steps>
+
+**Complete Guide**: `docs/architecture/BIDIRECTIONAL_IPC.md` in source repo
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Exit Codes" icon="traffic-light" href="/advanced/exit-codes">
+    Semantic exit code system (0-119)
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/advanced/troubleshooting">
+    Common issues and diagnostic commands
+  </Card>
+</CardGroup>
+
+## Source Code Reference
+
+**Key Modules**:
+- `src/commands/` - CLI handlers
+- `src/daemon/` - IPC server, worker process
+- `src/connection/` - CDP WebSocket, Chrome launcher
+- `src/telemetry/` - Network, console, DOM collectors
+- `src/ipc/` - Client helpers, type definitions
+- `src/session/` - Session files, metadata, cleanup

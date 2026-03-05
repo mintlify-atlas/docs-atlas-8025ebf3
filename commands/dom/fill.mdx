@@ -1,0 +1,228 @@
+---
+title: "bdg dom fill"
+description: "Fill form fields with React-compatible events"
+---
+
+## Overview
+
+Fill input fields, textareas, and select elements with values. Uses React-compatible synthetic events to ensure proper state updates. Automatically waits for network stability unless disabled.
+
+## Syntax
+
+```bash
+bdg dom fill <selector> <value> [options]
+```
+
+## Arguments
+
+<ParamField path="selector" type="string" required>
+  CSS selector or numeric index from cached query results (0-based)
+</ParamField>
+
+<ParamField path="value" type="string" required>
+  Value to fill into the field
+</ParamField>
+
+## Options
+
+<ParamField path="--index" type="number">
+  Element index if selector matches multiple (0-based)
+</ParamField>
+
+<ParamField path="--no-blur" type="flag">
+  Do not blur after filling (keeps focus on element)
+</ParamField>
+
+<ParamField path="--no-wait" type="flag">
+  Skip waiting for network stability after fill
+</ParamField>
+
+<ParamField path="--json" type="flag">
+  Output as JSON
+</ParamField>
+
+## Behavior
+
+### Event sequence
+
+1. **Focus**: Dispatches `focus` event
+2. **Input**: Sets value and dispatches React `input` event with `nativeEvent`
+3. **Change**: Dispatches React `change` event
+4. **Blur** (default): Removes focus with `blur` event
+5. **Wait** (default): Waits for network stability
+
+### React compatibility
+
+- Properly triggers `onChange` handlers in React components
+- Sets both DOM value and React internal state
+- Uses `Object.getOwnPropertyDescriptor` to update React's tracked value
+
+### Automatic waiting
+
+By default, waits for page stability after filling:
+- Network idle (no requests for 150ms)
+- DOM stable (no mutations for 200ms)
+- Maximum wait: 2 seconds
+
+## Examples
+
+### Fill by selector
+
+```bash
+# By ID
+bdg dom fill "#email" "user@example.com"
+
+# By name attribute
+bdg dom fill "input[name='username']" "john_doe"
+
+# By type
+bdg dom fill "input[type='password']" "SecurePass123"
+```
+
+### Fill by cached index
+
+```bash
+# Step 1: Query and cache
+bdg dom query "input"
+# Found 3 elements:
+# [0] <input.email>
+# [1] <input.password>
+# [2] <input.text>
+
+# Step 2: Fill by index
+bdg dom fill 0 "user@example.com"
+bdg dom fill 1 "SecurePass123"
+bdg dom fill 2 "John Doe"
+```
+
+### Fill specific match
+
+```bash
+# Fill 2nd input (0-based indexing)
+bdg dom fill "input" "value" --index 1
+```
+
+### Keep focus after filling
+
+```bash
+# Don't blur (useful for autocomplete)
+bdg dom fill "#search" "query" --no-blur
+```
+
+### Skip stability wait
+
+```bash
+# For fast, non-validating fields
+bdg dom fill "#name" "value" --no-wait
+```
+
+## Complete form workflow
+
+```bash
+# Discover form structure
+bdg dom form
+# Shows field indices and requirements
+
+# Fill required fields
+bdg dom fill 0 "user@example.com"     # Email
+bdg dom fill 1 "SecurePass123"        # Password
+bdg dom fill 2 "SecurePass123"        # Confirm password
+
+# Toggle checkbox
+bdg dom click 3                        # Terms checkbox
+
+# Submit
+bdg dom click 4                        # Submit button
+```
+
+## Supported field types
+
+### Text inputs
+
+```bash
+bdg dom fill "input[type='text']" "value"
+bdg dom fill "input[type='email']" "user@example.com"
+bdg dom fill "input[type='password']" "secret"
+bdg dom fill "input[type='tel']" "+1-555-0100"
+bdg dom fill "input[type='url']" "https://example.com"
+```
+
+### Textareas
+
+```bash
+bdg dom fill "textarea" "Multi-line\ntext\nvalue"
+```
+
+### Select elements
+
+```bash
+# By visible text
+bdg dom fill "select" "Option 2"
+
+# By value attribute
+bdg dom fill "select[name='country']" "US"
+```
+
+### Number inputs
+
+```bash
+bdg dom fill "input[type='number']" "42"
+```
+
+## Exit codes
+
+<ParamField path="0" type="number">
+  Success - field filled
+</ParamField>
+
+<ParamField path="83" type="number">
+  RESOURCE_NOT_FOUND - element not found
+</ParamField>
+
+<ParamField path="87" type="number">
+  STALE_CACHE - cached index invalid (page navigation)
+</ParamField>
+
+<ParamField path="102" type="number">
+  CDP_TIMEOUT - CDP operation timed out
+</ParamField>
+
+## Troubleshooting
+
+### Value not updating
+
+For React components, ensure:
+1. The component uses controlled inputs with `onChange`
+2. Try without `--no-blur` (blur triggers validation)
+3. Check for custom event handlers that may block updates
+
+### Slow filling
+
+If fills are slow due to stability waiting:
+- Use `--no-wait` for fields without validation
+- Fill multiple fields before waiting for submission
+
+### Element not fillable
+
+```bash
+# Verify element is an input
+bdg dom get "#element" --raw
+
+# Check if element is disabled
+bdg dom eval 'document.querySelector("#element").disabled'
+```
+
+## Comparison with other methods
+
+| Method | Use case |
+|--------|----------|
+| `bdg dom fill` | Form fields with React support |
+| `bdg dom eval` | Direct value setting without events |
+| `bdg dom pressKey` | Keyboard-based input |
+
+## Related commands
+
+- [`bdg dom form`](/guides/forms-and-interaction) - Discover form structure
+- [`bdg dom click`](/commands/dom/click) - Click buttons and checkboxes
+- [`bdg dom query`](/commands/dom/query) - Find form fields
+- [`bdg dom submit`](/guides/forms-and-interaction) - Submit forms

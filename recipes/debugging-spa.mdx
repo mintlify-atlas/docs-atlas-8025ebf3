@@ -1,0 +1,294 @@
+---
+title: "Debugging Single-Page Applications"
+description: "Diagnose console errors, network failures, and runtime issues in React, Vue, and Angular apps"
+---
+
+Single-page applications (SPAs) can be challenging to debug because state changes, AJAX requests, and console errors happen dynamically. This recipe shows how to use **bdg** to systematically investigate SPA issues.
+
+## Scenario
+
+You're debugging a React TodoMVC app at `https://demo.playwright.dev/todomvc` that exhibits the following problems:
+
+- Console warnings appear when adding todos
+- Network requests fail intermittently
+- The app doesn't update after certain actions
+
+You need to correlate console messages with network activity and identify the root cause.
+
+## Workflow
+
+<Steps>
+  <Step title="Start session with network and console collection">
+    Launch bdg and navigate to the app. Both network and console collectors are enabled by default.
+
+    ```bash
+    bdg https://demo.playwright.dev/todomvc
+    ```
+
+    Wait for the session to start. You'll see confirmation that Chrome is running.
+  </Step>
+
+  <Step title="Monitor initial page load">
+    Check what resources loaded and if there are any early console messages.
+
+    ```bash
+    # View network requests from page load
+    bdg peek --network --last 20
+
+    # Check console for warnings or errors
+    bdg console
+    ```
+
+    **Expected output:**
+    ```text
+    CONSOLE MESSAGES (current page only)
+    
+    Errors: 0
+    Warnings: 0
+    Info/Debug: 2 messages (hidden by default)
+    ```
+
+    If you see React warnings about deprecated APIs or missing keys, note them for later.
+  </Step>
+
+  <Step title="Interact with the app and watch for issues">
+    Add a todo item using form interaction commands.
+
+    ```bash
+    # Find the input field
+    bdg dom query ".new-todo"
+
+    # Fill and submit using Enter key (TodoMVC pattern)
+    bdg dom fill ".new-todo" "Buy groceries"
+    bdg dom pressKey ".new-todo" Enter
+    ```
+
+    **Expected output:**
+    ```text
+    ✓ Filled .new-todo with "Buy groceries"
+    ✓ Network stability achieved after 850ms
+    ```
+  </Step>
+
+  <Step title="Check for console errors after interaction">
+    After adding the todo, check if new console messages appeared.
+
+    ```bash
+    bdg console --list
+    ```
+
+    **Expected output:**
+    ```text
+    [1] [warning] Warning: Each child in a list should have a unique "key" prop.
+        Source: react-dom.development.js:86
+
+    [2] [log] Todo added: "Buy groceries"
+    ```
+
+    The warning indicates React is re-rendering without proper keys. This could cause state issues.
+  </Step>
+
+  <Step title="Monitor network activity during state changes">
+    Check if the app made API calls when you added the todo.
+
+    ```bash
+    # Filter for XHR and Fetch requests
+    bdg network list --type XHR,Fetch --last 10
+
+    # Or use the API preset
+    bdg network list --preset api
+    ```
+
+    **Expected output:**
+    ```text
+    NETWORK REQUESTS (last 10)
+
+    [0] POST /api/todos → 201 Created (125ms)
+        Size: 456 B | Type: Fetch
+    ```
+
+    If you see 4xx or 5xx errors, investigate headers and response bodies.
+  </Step>
+
+  <Step title="Inspect failed requests in detail">
+    If you found failing network requests, get full details including headers and response body.
+
+    ```bash
+    # Get request ID from network list
+    bdg network list --filter "status-code:>=400" --json | jq '.data.requests[0].requestId'
+
+    # View full request/response details
+    bdg details network <requestId>
+    ```
+
+    **Expected output:**
+    ```json
+    {
+      "url": "https://api.example.com/todos",
+      "method": "POST",
+      "status": 422,
+      "responseBody": {
+        "error": "Validation failed: title cannot be empty"
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Test edge cases systematically">
+    Reproduce the issue by testing edge cases like empty inputs, special characters, and rapid actions.
+
+    ```bash
+    # Test empty input
+    bdg dom fill ".new-todo" ""
+    bdg dom pressKey ".new-todo" Enter
+    bdg console
+
+    # Test special characters
+    bdg dom fill ".new-todo" "Test <script>alert('xss')</script>"
+    bdg dom pressKey ".new-todo" Enter
+    bdg console
+
+    # Test rapid additions
+    for i in {1..5}; do
+      bdg dom fill ".new-todo" "Item $i"
+      bdg dom pressKey ".new-todo" Enter
+    done
+    bdg console --list
+    ```
+  </Step>
+
+  <Step title="Capture final state and export data">
+    Stop the session to capture the final DOM snapshot and export network data.
+
+    ```bash
+    # Stop session (captures DOM and accessibility tree)
+    bdg stop
+
+    # Export network traffic as HAR file for analysis
+    bdg network har spa-debug.har
+
+    # View DOM snapshot
+    bdg peek --dom --json | jq '.data.dom.html' | head -50
+    ```
+  </Step>
+</Steps>
+
+## Analysis Tips
+
+### Correlate console errors with network timing
+
+Export both console and network data, then cross-reference timestamps:
+
+```bash
+bdg stop
+cat ~/.bdg/session.json | jq '{
+  console: [.data.console[] | {time: .timestamp, text: .text}],
+  network: [.data.network[] | {time: .wallTime, url: .url, status: .status}]
+}'
+```
+
+### Find React warnings about missing keys
+
+```bash
+bdg console --json | jq '.data.messages[] | select(.text | contains("key prop"))'
+```
+
+### Identify XHR failures
+
+```bash
+bdg network list --preset api --filter "status-code:>=400"
+```
+
+## Common SPA Issues
+
+<AccordionGroup>
+  <Accordion title="Console: React key prop warnings">
+    **Symptom:** `Warning: Each child in a list should have a unique "key" prop.`
+
+    **Diagnosis:** List items are re-rendering inefficiently, which can cause state loss.
+
+    **Investigation:**
+    ```bash
+    bdg console | grep -i "key"
+    bdg dom query "li" --json | jq '.data.nodes | length'
+    ```
+  </Accordion>
+
+  <Accordion title="Network: CORS errors on API calls">
+    **Symptom:** Fetch requests fail with CORS errors in console.
+
+    **Diagnosis:** Missing `Access-Control-Allow-Origin` headers.
+
+    **Investigation:**
+    ```bash
+    bdg network list --preset api --filter "status-code:>=400"
+    bdg network headers <requestId> | grep -i "access-control"
+    ```
+  </Accordion>
+
+  <Accordion title="Performance: State updates causing full re-renders">
+    **Symptom:** UI freezes when adding items.
+
+    **Diagnosis:** Inefficient state updates triggering excessive DOM operations.
+
+    **Investigation:**
+    ```bash
+    # Check if adding one item causes full DOM rebuild
+    bdg dom query "li" --json | jq '.data.nodes | length'
+    bdg dom fill ".new-todo" "Test"
+    bdg dom pressKey ".new-todo" Enter
+    bdg dom query "li" --json | jq '.data.nodes | length'
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Variations
+
+### Debug with screenshots for visual confirmation
+
+Capture the UI state before and after actions:
+
+```bash
+bdg dom screenshot before.png
+bdg dom fill ".new-todo" "Test item"
+bdg dom pressKey ".new-todo" Enter
+bdg dom screenshot after.png
+```
+
+### Stream console messages in real-time
+
+Watch console output as you interact with the app:
+
+```bash
+# In one terminal
+bdg console --follow
+
+# In another terminal
+bdg dom fill ".new-todo" "Interactive test"
+bdg dom pressKey ".new-todo" Enter
+```
+
+### Export everything for offline analysis
+
+```bash
+bdg stop
+bdg network har full-session.har
+cp ~/.bdg/session.json spa-debug-$(date +%Y%m%d-%H%M%S).json
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Console Command" icon="terminal" href="/commands/console">
+    Learn about console filtering and message expansion
+  </Card>
+  <Card title="Network Monitoring" icon="network-wired" href="/guides/network-monitoring">
+    Deep dive into network inspection and HAR export
+  </Card>
+  <Card title="Form Interaction" icon="pen-to-square" href="/guides/forms-and-interaction">
+    Master form filling and keyboard events
+  </Card>
+  <Card title="Testing Forms" icon="clipboard-check" href="/recipes/testing-forms">
+    Systematic form validation testing
+  </Card>
+</CardGroup>

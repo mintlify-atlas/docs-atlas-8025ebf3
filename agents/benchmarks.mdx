@@ -1,0 +1,492 @@
+---
+title: "Benchmarks"
+description: "CLI vs MCP comparison: real benchmark data from developer debugging tasks"
+---
+
+## Benchmark Overview
+
+We benchmarked bdg (CLI) against Chrome DevTools MCP Server on five real developer debugging workflows to answer: **which interface paradigm serves AI agents better?**
+
+<CardGroup cols={2}>
+  <Card title="CLI Score" icon="trophy" color="#00A67E">
+    **77/100** points
+  </Card>
+  <Card title="MCP Score" icon="chart-simple" color="#0074E4">
+    **60/100** points
+  </Card>
+  <Card title="Token Efficiency" icon="gauge-high" color="#00A67E">
+    **+33% better** for CLI (202.1 vs 152.3 TES)
+  </Card>
+  <Card title="Time Comparison" icon="clock" color="#0074E4">
+    **MCP 27% faster** (323s vs 441s)
+  </Card>
+</CardGroup>
+
+## Test Suite
+
+| Test | Difficulty | Task | Time Limit |
+|------|------------|------|------------|
+| Basic Error | ⭐ Easy | Find and diagnose one JS error | 2 min |
+| Multiple Errors | ⭐⭐ Moderate | Capture and categorize 5+ errors | 3 min |
+| SPA Debugging | ⭐⭐⭐ Advanced | Debug React app, correlate console/network | 5 min |
+| Form Validation | ⭐⭐⭐⭐ Expert | Test validation logic, find bugs | 5 min |
+| Memory Leak | ⭐⭐⭐⭐⭐ Master | Detect and quantify DOM memory leak | 8 min |
+
+### Methodology
+
+- Same URLs and time limits for both tools
+- Alternating test order to prevent learning bias
+- Metrics: task score, completion time, tokens consumed
+- Token Efficiency Score (TES) = (Score × 100) / (Tokens / 1000)
+
+## Overall Results
+
+| Metric | bdg (CLI) | MCP | Difference |
+|--------|-----------|-----|------------|
+| **Total Score** | 77/100 | 60/100 | +28% |
+| **Total Time** | 441s | 323s | +37% slower |
+| **Total Tokens** | ~38.1K | ~39.4K | -3% fewer |
+| **Token Efficiency** | 202.1 | 152.3 | +33% |
+
+<Check>
+  **Winner: CLI** - Higher score with similar token usage = better efficiency
+</Check>
+
+## Test-by-Test Analysis
+
+### Test 1: Basic Error Detection (⭐ Easy)
+
+<Tabs>
+  <Tab title="Results">
+    | Metric | bdg | MCP |
+    |--------|-----|-----|
+    | **Score** | 18/20 | 14/20 |
+    | **Time** | 69s | 46s |
+    | **Tokens** | ~3.6K | ~4.8K |
+    | **Penalty** | -2 pts | 0 |
+  </Tab>
+  
+  <Tab title="What Happened">
+    **bdg:** Found error with full stack trace (6 frames), function names, line/column numbers for each frame
+    
+    **MCP:** Found error with basic message "$ is not defined", limited location info
+    
+    Both successfully navigated and triggered the error, but bdg provided production-ready debugging information.
+  </Tab>
+  
+  <Tab title="Key Difference">
+    **Error detail depth**
+    
+    bdg output:
+    ```json
+    {
+      "type": "error",
+      "message": "Uncaught ReferenceError: $ is not defined",
+      "stackTrace": [
+        {"functionName": "updateSiteTitle", "lineNumber": 4, "columnNumber": 17},
+        {"functionName": "foo", "lineNumber": 8, "columnNumber": 5},
+        {"functionName": "", "lineNumber": 11, "columnNumber": 1}
+      ]
+    }
+    ```
+    
+    MCP output:
+    ```text
+    Error: $ is not defined
+    Location: line 4
+    ```
+  </Tab>
+</Tabs>
+
+<Info>
+  **Takeaway:** bdg's structured JSON with full stack traces saves developer investigation time
+</Info>
+
+### Test 2: Multiple Error Collection (⭐⭐ Moderate)
+
+<Tabs>
+  <Tab title="Results">
+    | Metric | bdg | MCP |
+    |--------|-----|-----|
+    | **Score** | 18/20 | 12/20 |
+    | **Time** | 75s | 48s |
+    | **Tokens** | ~18.7K | ~9.3K |
+    | **Errors Found** | 18 (14 unique) | 3 |
+  </Tab>
+  
+  <Tab title="What Happened">
+    Page had 17 "Run" buttons, each triggering different errors.
+    
+    **bdg:** Used JavaScript evaluation to click all 17 buttons with timeouts in a single command:
+    ```bash
+    bdg cdp Runtime.evaluate --params '{
+      "expression": "document.querySelectorAll(\"button\").forEach((b,i) => setTimeout(() => b.click(), i*100))"
+    }'
+    ```
+    Captured 18 errors (14 unique types) with full stack traces.
+    
+    **MCP:** Made 11 individual click calls, missing 6 buttons. Captured only 3 errors.
+  </Tab>
+  
+  <Tab title="Key Difference">
+    **Batch operation capability**
+    
+    bdg's `Runtime.evaluate` access enables efficient batch operations that are impossible with MCP's click-by-click approach.
+    
+    Despite using 2× the tokens, bdg found **6× more errors** - better value for token spend.
+  </Tab>
+</Tabs>
+
+<Warning>
+  MCP doesn't expose arbitrary JavaScript execution - each interaction requires a separate tool call
+</Warning>
+
+### Test 3: SPA Debugging (⭐⭐⭐ Advanced)
+
+<Tabs>
+  <Tab title="Results">
+    | Metric | bdg | MCP |
+    |--------|-----|-----|
+    | **Score** | 14/20 | 13/20 |
+    | **Time** | 100s | 57s |
+    | **Tokens** | ~4.7K | ~6.6K |
+  </Tab>
+  
+  <Tab title="What Happened">
+    Both tools tested React TodoMVC app. Neither found significant bugs (app is well-built). Both identified a 404 favicon error.
+    
+    **bdg:** Tested with batch operations (added 10 todos via JavaScript), exported HAR file for network analysis
+    
+    **MCP:** Tested with manual interactions (added 1 todo), retrieved detailed network request including HTML response body
+  </Tab>
+  
+  <Tab title="Key Difference">
+    **HAR export capability**
+    
+    bdg's HAR export enables offline analysis and integration with other tools:
+    ```bash
+    bdg network har - | jq '.log.entries[] | select(.response.status >= 400)'
+    ```
+    
+    MCP was 43% faster but both found similar results on this clean application.
+  </Tab>
+</Tabs>
+
+<Info>
+  **Takeaway:** When an application has no bugs to find, tools perform similarly. bdg's advantage comes from deeper analysis capabilities.
+</Info>
+
+### Test 4: Form Validation Testing (⭐⭐⭐⭐ Expert)
+
+<Tabs>
+  <Tab title="Results">
+    | Metric | bdg | MCP |
+    |--------|-----|-----|
+    | **Score** | 15/20 | 13/20 |
+    | **Time** | 93s | 102s |
+    | **Tokens** | ~3.5K | ~15.2K |
+    | **Penalty** | 0 | -2 pts (timeout) |
+  </Tab>
+  
+  <Tab title="What Happened">
+    Form included a country dropdown with 195 options.
+    
+    **bdg:** Tested 4 validation scenarios (valid, age < min, age > max, empty required) in 93s using ~3.5K tokens
+    
+    **MCP:** Tested 3 scenarios in 102s using ~15.2K tokens. Every snapshot included the full accessibility tree with all 195 country options.
+  </Tab>
+  
+  <Tab title="Key Difference">
+    **Verbosity problem**
+    
+    MCP's accessibility tree approach becomes unwieldy with complex forms:
+    
+    | Element Type | bdg Tokens | MCP Tokens |
+    |--------------|------------|------------|
+    | Single input | ~10 | ~10 |
+    | 195-option dropdown | ~50 | ~5,000 |
+    
+    **4.3× more efficient** with better coverage
+  </Tab>
+</Tabs>
+
+<Warning>
+  MCP exceeded time limit by 42s due to verbose accessibility tree dumps on every interaction
+</Warning>
+
+### Test 5: Memory Leak Detection (⭐⭐⭐⭐⭐ Master)
+
+<Tabs>
+  <Tab title="Results">
+    | Metric | bdg | MCP |
+    |--------|-----|-----|
+    | **Score** | 12/20 | 8/20 |
+    | **Time** | 104s | 70s |
+    | **Tokens** | ~7.6K | ~3.5K |
+  </Tab>
+  
+  <Tab title="What Happened">
+    **bdg:** Used CDP HeapProfiler methods to measure memory:
+    ```bash
+    # Baseline
+    bdg cdp Runtime.getHeapUsage
+    # {"usedSize": 833000, "totalSize": 1500000}
+    
+    # Trigger leak (30 clicks)
+    bdg dom click "button"
+    
+    # Re-measure
+    bdg cdp Runtime.getHeapUsage
+    # {"usedSize": 790000, "totalSize": 3000000}
+    ```
+    **Detected 100% embedder heap growth** (1.5MB → 3MB)
+    
+    **MCP:** Observed messages appearing in DOM, no memory measurement capability
+  </Tab>
+  
+  <Tab title="Key Difference">
+    **Fundamental capability gap**
+    
+    | Capability | bdg | MCP |
+    |------------|-----|-----|
+    | HeapProfiler access | ✓ | ✗ |
+    | Memory snapshots | ✓ | ✗ |
+    | Quantifiable measurements | ✓ | ✗ |
+    | Visual DOM observation | ✓ | ✓ |
+    
+    MCP could see elements appearing but couldn't prove memory was leaking.
+  </Tab>
+</Tabs>
+
+<Check>
+  **Critical advantage:** Memory debugging requires CDP access - bdg's core strength, MCP's blind spot
+</Check>
+
+## Capability Comparison
+
+### Coverage Matrix
+
+| CDP Domain | bdg Access | MCP Access |
+|------------|------------|------------|
+| Runtime | Full (21 methods) | evaluate_script only |
+| DOM | Full (39 methods) | Via accessibility tree |
+| Network | Full + HAR export | list_network_requests |
+| Console | Full + streaming | list_console_messages |
+| HeapProfiler | Full (17 methods) | None |
+| Debugger | Full (35 methods) | None |
+| Performance | Full (22 methods) | None |
+| Accessibility | Selective queries | Full tree dumps |
+
+### Feature Comparison
+
+<Tabs>
+  <Tab title="bdg Strengths">
+    ✓ **Comprehensive error data** - Full stack traces, line numbers, function names
+    
+    ✓ **Efficient batch operations** - JavaScript eval for clicking multiple elements
+    
+    ✓ **Advanced CDP access** - Direct access to HeapProfiler, Runtime, all 53 domains
+    
+    ✓ **Structured output** - JSON format with detailed error categorization
+    
+    ✓ **Network analysis** - HAR export capability for detailed request inspection
+    
+    ✓ **Memory profiling** - Native heap measurement via CDP
+    
+    ✓ **Unix composability** - Pipes naturally with jq, grep, etc.
+    
+    ✓ **Selective queries** - Fetch only what's needed, control token usage
+  </Tab>
+  
+  <Tab title="bdg Weaknesses">
+    ✗ **Slower execution** - Average 88s vs 65s for MCP
+    
+    ✗ **Console-focused** - Primarily focuses on console/network, less on UI state
+    
+    ✗ **Learning curve** - More powerful = more to learn (mitigated by self-documentation)
+  </Tab>
+  
+  <Tab title="MCP Strengths">
+    ✓ **Faster execution** - Average 65s vs 88s (27% faster)
+    
+    ✓ **Visual feedback** - Accessibility tree snapshots provide UI context
+    
+    ✓ **User-friendly output** - Clear text-based responses
+    
+    ✓ **Direct element interaction** - Straightforward click/fill operations
+    
+    ✓ **Good for basic debugging** - Effective for simple error detection
+  </Tab>
+  
+  <Tab title="MCP Weaknesses">
+    ✗ **Limited error detail** - Basic error messages without full stack traces
+    
+    ✗ **No advanced profiling** - Cannot access heap profiling or memory tools
+    
+    ✗ **Incomplete batch operations** - Manual click-by-click vs batch execution
+    
+    ✗ **Less structured data** - Text output vs JSON for programmatic analysis
+    
+    ✗ **No network export** - Cannot export HAR files
+    
+    ✗ **No CDP access** - Cannot use 300+ advanced Chrome DevTools Protocol features
+    
+    ✗ **Verbosity problem** - Full accessibility tree dumps consume excessive tokens
+  </Tab>
+</Tabs>
+
+## Token Efficiency Analysis
+
+### Test-by-Test Token Usage
+
+| Test | bdg Tokens | MCP Tokens | Ratio | bdg Score | MCP Score |
+|------|------------|------------|-------|-----------|----------|
+| Test 1: Basic Error | 3,600 | 4,800 | 0.75× | 18/20 | 14/20 |
+| Test 2: Multiple Errors | 18,700 | 9,300 | 2.0× | 18/20 | 12/20 |
+| Test 3: SPA Debugging | 4,700 | 6,600 | 0.71× | 14/20 | 13/20 |
+| Test 4: Form Validation | 3,500 | 15,200 | 0.23× | 15/20 | 13/20 |
+| Test 5: Memory Leak | 7,600 | 3,500 | 2.17× | 12/20 | 8/20 |
+| **Total** | **38,100** | **39,400** | **0.97×** | **77/100** | **60/100** |
+
+<Info>
+  Similar total tokens, but bdg achieved **28% higher score** - tokens spent more effectively
+</Info>
+
+### Token Efficiency Score (TES)
+
+```text
+TES = (Score × 100) / (Tokens / 1000)
+
+bdg: (77 × 100) / 38.1 = 202.1
+MCP: (60 × 100) / 39.4 = 152.3
+
+Advantage: +33% for CLI
+```
+
+### Real-World Token Examples
+
+**Amazon product page:**
+- MCP: 52,000 tokens (single snapshot, truncated at system limit)
+- bdg: 1,200 tokens (two targeted queries)
+- **43× more efficient**
+
+**Form with 195-option dropdown:**
+- MCP: ~5,000 tokens per interaction (full accessibility tree)
+- bdg: ~50 tokens per interaction (targeted selector)
+- **100× more efficient**
+
+## When to Use Each Tool
+
+<Tabs>
+  <Tab title="Use bdg">
+    <CardGroup cols={2}>
+      <Card title="Complex Debugging" icon="bug">
+        Detailed error analysis with full stack traces
+      </Card>
+      <Card title="Memory Profiling" icon="memory">
+        Heap analysis and memory leak detection
+      </Card>
+      <Card title="Automated Testing" icon="robot">
+        Structured JSON output for test automation
+      </Card>
+      <Card title="Network Analysis" icon="network-wired">
+        HAR export for detailed request inspection
+      </Card>
+      <Card title="Batch Operations" icon="list-check">
+        JavaScript evaluation for efficient testing
+      </Card>
+      <Card title="Token Efficiency" icon="gauge">
+        Context-constrained agents, cost optimization
+      </Card>
+    </CardGroup>
+  </Tab>
+  
+  <Tab title="Use MCP">
+    <CardGroup cols={2}>
+      <Card title="Quick Testing" icon="bolt">
+        Fast exploratory debugging sessions
+      </Card>
+      <Card title="UI-Focused Testing" icon="eye">
+        Visual state inspection via accessibility tree
+      </Card>
+      <Card title="Simple Errors" icon="circle-exclamation">
+        Basic console error detection
+      </Card>
+      <Card title="Accessibility Audits" icon="universal-access">
+        WCAG compliance checking
+      </Card>
+      <Card title="MCP Ecosystem" icon="plug">
+        Already invested in MCP infrastructure
+      </Card>
+      <Card title="Sandboxed Environments" icon="shield">
+        Safety guarantees without arbitrary code execution
+      </Card>
+    </CardGroup>
+  </Tab>
+</Tabs>
+
+## Key Findings
+
+<AccordionGroup>
+  <Accordion title="1. Token efficiency through selective queries" icon="gauge-high">
+    CLI's selective query approach (fetch what you need) vs MCP's bulk dumps (dump everything) resulted in **33% better token efficiency** while achieving higher scores.
+    
+    Example: 195-option dropdown consumed 50 tokens with bdg vs 5,000 tokens with MCP on every interaction.
+  </Accordion>
+  
+  <Accordion title="2. Capability coverage matters" icon="microchip">
+    Memory profiling, HAR export, and batch JavaScript execution are **core debugging workflows**, not edge features. bdg's 300+ CDP method access vs MCP's limited tool set was decisive.
+  </Accordion>
+  
+  <Accordion title="3. Unix composability extends capability" icon="terminal">
+    bdg's output pipes naturally with jq, grep, sort - enabling transformations and filtering without additional implementation. MCP responses require internal parsing.
+  </Accordion>
+  
+  <Accordion title="4. Predictable output size" icon="ruler">
+    Agents can estimate bdg token cost before calling (proportional to results, bounded by limits). MCP's snapshots are unpredictable (5K-52K tokens).
+  </Accordion>
+  
+  <Accordion title="5. Speed vs depth trade-off" icon="balance-scale">
+    MCP was 27% faster but provided less actionable information. bdg's extra time bought comprehensive data that saves developer investigation time.
+  </Accordion>
+</AccordionGroup>
+
+## Conclusion
+
+For **developer debugging workflows**, CLI provides more capability with better efficiency:
+
+- **+28% higher score** (77 vs 60)
+- **+33% better token efficiency** (202.1 vs 152.3 TES)
+- **Capabilities MCP lacks:** Memory profiling, HAR export, batch operations
+- **Token efficiency wins:** Form testing (4.3× better), selective queries (43× better)
+
+The margin wasn't close. CLI completed tasks that MCP structurally couldn't (memory profiling), and did shared tasks with less overhead (selective queries vs full dumps).
+
+<Info>
+  This doesn't mean MCP is "bad" - it optimizes for different constraints (ecosystem integration, sandboxing). For power-user debugging, CLI is superior.
+</Info>
+
+## Full Benchmark Documentation
+
+<CardGroup cols={2}>
+  <Card title="Benchmark Article" icon="newspaper" href="/agents/benchmarks">
+    Complete MCP vs CLI analysis with detailed explanations
+  </Card>
+  <Card title="Benchmark Results" icon="chart-bar" href="/agents/benchmarks">
+    Raw benchmark data and test-by-test breakdowns
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Overview" icon="house" href="/agents/overview">
+    Why bdg is built for AI agents
+  </Card>
+  <Card title="Discovery Pattern" icon="magnifying-glass" href="/agents/discovery-pattern">
+    How agents discover capabilities
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/agents/error-handling">
+    Semantic exit codes and recovery
+  </Card>
+</CardGroup>

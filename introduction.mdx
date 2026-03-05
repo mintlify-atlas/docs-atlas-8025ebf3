@@ -1,0 +1,128 @@
+---
+title: Introduction
+description: Chrome DevTools Protocol in your terminal. Built for AI agents and developers who want direct browser control.
+---
+
+<img
+  className="block dark:hidden"
+  src="https://media.brand.dev/7316e6d5-0198-4785-94cd-cb9b972e0c98.png"
+  alt="Browser Debugger CLI"
+  style={{ width: '120px', marginBottom: '2rem' }}
+/>
+<img
+  className="hidden dark:block"
+  src="https://media.brand.dev/d0bd54b1-0a8c-48a1-8fc0-be53e565a398.png"
+  alt="Browser Debugger CLI"
+  style={{ width: '120px', marginBottom: '2rem' }}
+/>
+
+# Browser Debugger CLI
+
+**Chrome DevTools Protocol in your terminal.** Opens a persistent connection to Chrome where commands can be executed sequentially via Unix pipes. Designed for AI agents and developers who want direct browser control without framework overhead.
+
+## Why bdg?
+
+<CardGroup cols={2}>
+  <Card title="Raw CDP Access" icon="plug">
+    All 644 protocol methods available directly. No abstractions, no limitations.
+  </Card>
+  <Card title="Token Efficient" icon="coins">
+    No overhead from MCP tool definitions. Progressive discovery loads only what's needed.
+  </Card>
+  <Card title="Self-Correcting" icon="shield-check">
+    Errors clearly exposed with semantic exit codes and suggestions for recovery.
+  </Card>
+  <Card title="Composable" icon="puzzle-piece">
+    Unix philosophy: pipes, jq, and shell scripts work naturally.
+  </Card>
+</CardGroup>
+
+## When to use alternatives
+
+<AccordionGroup>
+  <Accordion title="Puppeteer/Playwright">
+    Use for complex multi-step scripts and mature testing ecosystems with built-in assertions and retry logic.
+  </Accordion>
+  <Accordion title="Chrome DevTools MCP">
+    Use if you're already invested in MCP infrastructure and need tight integration with existing MCP servers.
+  </Accordion>
+</AccordionGroup>
+
+## Built for AI Agents
+
+Browser Debugger CLI is optimized for programmatic use by AI agents:
+
+- **Self-discovery** — `--list`, `--search`, and `--describe` flags expose capabilities without documentation
+- **Semantic exit codes** — 0-119 range with specific meanings for error handling
+- **Structured errors** — JSON output with suggestions for recovery
+- **Case-insensitive commands** — Handles typos and variations gracefully
+- **Token-efficient output** — Minimal noise, maximum signal
+
+<Note>
+  Read more about agent-friendly design principles in the [For AI Agents](/agents/overview) section.
+</Note>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="DOM Inspection" icon="magnifying-glass" href="/guides/dom-inspection">
+    Query elements with CSS selectors and accessibility tree
+  </Card>
+  <Card title="Network Monitoring" icon="network-wired" href="/guides/network-monitoring">
+    Track requests, export HAR files, inspect headers
+  </Card>
+  <Card title="Console Debugging" icon="terminal" href="/guides/console-debugging">
+    Capture console messages with full argument inspection
+  </Card>
+  <Card title="Forms & Interaction" icon="pen-to-square" href="/guides/forms-and-interaction">
+    Fill forms, click buttons, submit data programmatically
+  </Card>
+  <Card title="Screenshots" icon="camera" href="/guides/screenshots">
+    Capture full-page or element screenshots
+  </Card>
+  <Card title="CDP Commands" icon="code" href="/concepts/cdp-access">
+    Execute any of the 644 Chrome DevTools Protocol methods
+  </Card>
+</CardGroup>
+
+## Quick Example
+
+```bash
+# Start a session
+bdg example.com
+
+# Query DOM elements
+bdg dom query "button"
+
+# Execute CDP methods
+bdg cdp Network.getCookies
+
+# Monitor network traffic
+bdg peek --network
+
+# Stop session
+bdg stop
+```
+
+## Platform Support
+
+- ✅ macOS and Linux
+- ✅ Windows via WSL
+- ❌ PowerShell/Git Bash (not yet)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install bdg via npm and get started
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Start your first session in 60 seconds
+  </Card>
+  <Card title="Command Reference" icon="book" href="/commands/start">
+    Explore all available commands
+  </Card>
+  <Card title="For AI Agents" icon="robot" href="/agents/overview">
+    Learn about agent-optimized features
+  </Card>
+</CardGroup>

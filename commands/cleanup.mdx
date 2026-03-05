@@ -1,0 +1,344 @@
+---
+title: 'bdg cleanup'
+description: 'Clean up stale session files and orphaned processes'
+---
+
+## Overview
+
+The `cleanup` command removes stale session files, kills orphaned daemon processes, and optionally terminates Chrome instances. Use this to recover from crashed sessions or clean up after abnormal termination.
+
+## Syntax
+
+```bash
+bdg cleanup [options]
+```
+
+## Options
+
+<ParamField path="--force" type="boolean" default="false">
+  Force cleanup even if session appears active (removes files but doesn't kill processes)
+  
+  ```bash
+  bdg cleanup --force
+  ```
+</ParamField>
+
+<ParamField path="--remove-output" type="boolean" default="false">
+  Also remove the session.json output file
+  
+  ```bash
+  bdg cleanup --remove-output
+  ```
+</ParamField>
+
+<ParamField path="--aggressive" type="boolean" default="false">
+  Kill orphaned daemon processes and all stale Chrome instances
+  
+  ```bash
+  bdg cleanup --aggressive
+  ```
+</ParamField>
+
+<ParamField path="--json" type="boolean" default="false">
+  Output as JSON for programmatic use
+  
+  ```bash
+  bdg cleanup --json
+  ```
+</ParamField>
+
+## Examples
+
+### Basic Cleanup
+
+```bash
+bdg cleanup
+```
+
+**Output:**
+
+```
+Session files cleaned up
+
+Session directory is now clean
+```
+
+### No Stale Files
+
+```bash
+bdg cleanup
+```
+
+**Output:**
+
+```
+No session files found. Session directory is already clean
+```
+
+### Force Cleanup (Active Session)
+
+```bash
+bdg cleanup --force
+```
+
+**Output:**
+
+```
+Session files cleaned up
+Warning: Session process (PID 12345) is still running
+
+Session directory is now clean
+```
+
+<Warning>
+`--force` removes session files but does NOT kill the running daemon or Chrome. Use `bdg stop` for graceful shutdown or `--aggressive` to kill processes.
+</Warning>
+
+### Aggressive Cleanup
+
+```bash
+bdg cleanup --aggressive
+```
+
+**Output:**
+
+```
+Session files cleaned up
+Killed Chrome (PID 12346)
+Cleaned up 2 orphaned daemon processes
+
+Session directory is now clean
+```
+
+### Remove Output File
+
+```bash
+bdg cleanup --remove-output
+```
+
+**Output:**
+
+```
+Session files cleaned up
+Session output file removed
+
+Session directory is now clean
+```
+
+### JSON Output
+
+```bash
+bdg cleanup --json
+```
+
+**Output:**
+
+```json
+{
+  "version": "0.5.1",
+  "success": true,
+  "data": {
+    "cleaned": {
+      "session": true,
+      "output": false,
+      "chrome": false,
+      "daemons": false
+    },
+    "message": "Session directory is now clean"
+  }
+}
+```
+
+## What Gets Cleaned Up
+
+### Session Files (Default)
+
+- `~/.bdg/daemon.pid`
+- `~/.bdg/daemon.sock`
+- `~/.bdg/session.meta.json`
+- `~/.bdg/chrome-profile/` (temporary Chrome profile)
+
+### Output File (`--remove-output`)
+
+- `~/.bdg/session.json`
+
+### Processes (`--aggressive`)
+
+- Orphaned bdg daemon processes (PIDs from stale `daemon.pid` files)
+- All Chrome instances launched by bdg (uses `chrome-launcher` killAll)
+
+<Note>
+`--aggressive` uses `chrome-launcher`'s `killAll()` which terminates ALL Chrome instances on the system, not just bdg-launched ones. Use with caution.
+</Note>
+
+## Use Cases
+
+### Recover from Crashed Session
+
+```bash
+# Daemon crashed or was killed
+bdg status
+# Error: Daemon not running
+
+# Clean up stale files
+bdg cleanup
+
+# Start fresh session
+bdg example.com
+```
+
+### Reset After Abnormal Termination
+
+```bash
+# System reboot, force quit, etc.
+bdg cleanup --aggressive
+
+# Verify cleanup
+bdg status
+# No active session.
+```
+
+### Clean Slate for Testing
+
+```bash
+# Remove all session data including output
+bdg cleanup --remove-output
+
+# Start fresh test
+bdg localhost:3000
+```
+
+### CI/CD Cleanup
+
+```bash
+# Ensure clean state before test run
+bdg cleanup --aggressive
+
+# Run tests
+bdg https://staging.example.com --headless
+# ... test commands ...
+bdg stop
+
+# Cleanup after (removes output too)
+bdg cleanup --remove-output
+```
+
+### Kill All Chrome Instances
+
+```bash
+# Nuclear option: kill everything
+bdg cleanup --aggressive
+
+# Or combine with stop
+bdg stop --kill-chrome
+bdg cleanup --aggressive  # Also kills orphaned daemons
+```
+
+## Error Handling
+
+### Session Still Active (No Force)
+
+```bash
+# Session is running
+bdg cleanup
+```
+
+**Output:**
+
+```
+Error: Session is still active (PID 12345)
+Suggestion: Stop gracefully: bdg stop
+           Force cleanup: bdg cleanup --force
+Warning: Force cleanup will remove session files but will NOT kill the running process
+```
+
+**Exit Code:** 85 (RESOURCE_BUSY)
+
+### Permission Denied
+
+If session files are not writable:
+
+```bash
+bdg cleanup
+```
+
+**Output:**
+
+```
+Error: Permission denied
+Suggestion: Check file permissions in ~/.bdg/
+```
+
+**Exit Code:** 82 (PERMISSION_DENIED)
+
+## Cleanup vs Stop
+
+| Command | Purpose | Session Data | Chrome | Graceful |
+|---------|---------|--------------|--------|----------|
+| `bdg stop` | End active session | ✅ Saved to disk | ⚠️ Keeps running | ✅ Yes |
+| `bdg stop --kill-chrome` | End session + kill Chrome | ✅ Saved to disk | ✅ Terminated | ✅ Yes |
+| `bdg cleanup` | Remove stale files | ❌ Lost if not saved | ⚠️ Keeps running | ⚠️ If session dead |
+| `bdg cleanup --force` | Force remove files | ❌ Lost | ⚠️ Keeps running | ❌ No |
+| `bdg cleanup --aggressive` | Nuclear cleanup | ❌ Lost | ✅ Terminated | ❌ No |
+
+<Tip>
+**Always prefer `bdg stop`** for graceful shutdown. Use `cleanup` only for stale sessions or recovery scenarios.
+</Tip>
+
+## Exit Codes
+
+<ResponseField name="0" type="SUCCESS">
+  Cleanup completed successfully
+</ResponseField>
+
+<ResponseField name="82" type="PERMISSION_DENIED">
+  Insufficient permissions to remove session files
+</ResponseField>
+
+<ResponseField name="85" type="RESOURCE_BUSY">
+  Session is active and `--force` not specified
+</ResponseField>
+
+<ResponseField name="110" type="SOFTWARE_ERROR">
+  Unexpected error during cleanup
+</ResponseField>
+
+## Related Commands
+
+<CardGroup cols={2}>
+  <Card title="bdg stop" icon="stop" href="/commands/stop">
+    Gracefully stop session and save data
+  </Card>
+  <Card title="bdg status" icon="chart-line" href="/commands/status">
+    Check if cleanup is needed
+  </Card>
+  <Card title="bdg start" icon="play" href="/commands/start">
+    Start fresh session after cleanup
+  </Card>
+</CardGroup>
+
+## Tips
+
+<Tip>
+**When to Use Cleanup**: Run `cleanup` when `bdg status` shows no session but you can't start a new one, or after crashes/force quits.
+</Tip>
+
+<Tip>
+**Stale Detection**: If a session appears active but you force cleaned it, the running daemon will continue operating but be inaccessible. Use `--aggressive` to kill it.
+</Tip>
+
+<Tip>
+**CI/CD Best Practice**: Always run `bdg cleanup --aggressive` before AND after test runs to ensure clean state.
+</Tip>
+
+<Warning>
+**Data Loss**: Cleanup removes session files without saving data. If you need the data, use `bdg stop` instead.
+</Warning>
+
+<Warning>
+**Aggressive Mode Danger**: `--aggressive` kills ALL Chrome instances on the system using `chrome-launcher.killAll()`. Don't use if you have other Chrome windows open.
+</Warning>
+
+<Warning>
+**Force Cleanup Limitation**: `--force` removes files but doesn't terminate processes. The orphaned daemon/Chrome may consume resources until killed manually or with `--aggressive`.
+</Warning>

@@ -1,0 +1,315 @@
+---
+title: "bdg dom screenshot"
+description: "Capture page or element screenshots with auto-resize for Claude Vision"
+---
+
+## Overview
+
+Capture screenshots of the entire page, viewport, or specific elements. Automatically resizes images to optimize for Claude Vision token costs (~1,600 tokens max) unless disabled.
+
+## Syntax
+
+```bash
+bdg dom screenshot <path> [options]
+```
+
+## Arguments
+
+<ParamField path="path" type="string" required>
+  Output file path (PNG/JPEG), or directory for `--follow` mode
+</ParamField>
+
+## Options
+
+### Capture target
+
+<ParamField path="--selector" type="string">
+  CSS selector for element capture
+</ParamField>
+
+<ParamField path="--index" type="number">
+  Cached element index (0-based) from previous query
+</ParamField>
+
+<ParamField path="--scroll" type="string">
+  Scroll element into view before capture
+</ParamField>
+
+### Image format
+
+<ParamField path="--format" type="string">
+  Image format: `png` or `jpeg` (default: `png`)
+</ParamField>
+
+<ParamField path="--quality" type="number">
+  JPEG quality 0-100 (default: 90)
+</ParamField>
+
+### Capture mode
+
+<ParamField path="--no-full-page" type="flag">
+  Capture viewport only instead of full page (default: full page)
+</ParamField>
+
+<ParamField path="--no-resize" type="flag">
+  Disable auto-resize, capture at full resolution
+</ParamField>
+
+### Continuous capture
+
+<ParamField path="--follow" type="flag">
+  Continuous capture mode to directory
+</ParamField>
+
+<ParamField path="--interval" type="number">
+  Capture interval for `--follow` in milliseconds (default: 1000)
+</ParamField>
+
+<ParamField path="--limit" type="number">
+  Maximum frames for `--follow` mode
+</ParamField>
+
+### Output
+
+<ParamField path="--json" type="flag">
+  Output metadata as JSON
+</ParamField>
+
+## Auto-resize behavior
+
+By default, screenshots are optimized for Claude Vision API:
+
+- Images exceeding **1568px** on longest edge are scaled down
+- Tall pages (aspect ratio > 3:1) automatically capture viewport only
+- Targets **~1,600 tokens** per image
+- Accounts for device pixel ratio (Retina displays)
+
+Disable with `--no-resize` for full resolution.
+
+## Examples
+
+### Full page capture
+
+```bash
+# Auto-resized for Claude Vision
+bdg dom screenshot page.png
+
+# Full resolution
+bdg dom screenshot page.png --no-resize
+
+# JPEG format
+bdg dom screenshot page.jpg --format jpeg --quality 90
+```
+
+### Viewport capture
+
+```bash
+# Visible area only
+bdg dom screenshot viewport.png --no-full-page
+
+# Scroll then capture viewport
+bdg dom screenshot section.png --scroll "#pricing" --no-full-page
+```
+
+### Element capture
+
+```bash
+# By selector
+bdg dom screenshot button.png --selector "#submit-btn"
+
+# By cached index
+bdg dom query "button"
+bdg dom screenshot button.png --index 0
+```
+
+### Continuous capture
+
+```bash
+# Capture every second to directory
+bdg dom screenshot ./frames --follow
+# Creates: 001.png, 002.png, 003.png...
+
+# Custom interval and limit
+bdg dom screenshot ./frames --follow --interval 500 --limit 10
+
+# JPEG sequence
+bdg dom screenshot ./frames --follow --format jpeg
+```
+
+## Output metadata
+
+### Human-readable format
+
+```bash
+$ bdg dom screenshot page.png
+Screenshot saved: /path/to/page.png
+Format: png
+Dimensions: 1200x3200 (resized from 1920x5120)
+Size: 245.3 KB
+Mode: full_page
+Tokens: ~1,584 (saved ~4,201 tokens via resize)
+```
+
+### JSON format
+
+```json
+{
+  "version": "0.5.1",
+  "success": true,
+  "data": {
+    "path": "/path/to/page.png",
+    "format": "png",
+    "width": 1200,
+    "height": 3200,
+    "size": 251187,
+    "fullPage": true,
+    "captureMode": "full_page",
+    "finalTokens": 1584,
+    "resized": true,
+    "originalWidth": 1920,
+    "originalHeight": 5120,
+    "originalTokens": 5785
+  }
+}
+```
+
+## Capture modes
+
+### Full page (default)
+
+```bash
+bdg dom screenshot page.png
+```
+
+- Captures entire scrollable page
+- Auto-resizes if height exceeds optimal size
+- Falls back to viewport for very tall pages (aspect ratio > 3:1)
+
+### Viewport only
+
+```bash
+bdg dom screenshot visible.png --no-full-page
+```
+
+- Captures only visible area
+- Faster than full page
+- Useful for above-the-fold content
+
+### Element clipping
+
+```bash
+bdg dom screenshot element.png --selector "#chart"
+```
+
+- Captures element's bounding box only
+- Auto-resizes if element is large
+- Element must be visible (not `display: none`)
+
+### Scroll + capture
+
+```bash
+bdg dom screenshot footer.png --scroll "footer" --no-full-page
+```
+
+- Scrolls element into view
+- Waits for lazy-loaded content
+- Captures viewport after scroll
+- Restores original scroll position
+
+## Token optimization
+
+### Why auto-resize?
+
+Claude Vision API charges by image resolution:
+- Images resize to fit within 1568px on longest edge
+- Target: ~1,600 tokens per image (cost-effective sweet spot)
+- Maintains aspect ratio, quality sufficient for UI analysis
+
+### When to use `--no-resize`
+
+```bash
+bdg dom screenshot full-res.png --no-resize
+```
+
+Use full resolution when:
+- Need to read small text or details
+- Creating reference images for humans
+- Image will be downscaled elsewhere
+- Not using with Claude Vision API
+
+### Token estimates
+
+Token calculation formula:
+```
+tokens = (width / 512) × (height / 512) × 170 + 85
+```
+
+Examples:
+- 1920×1080: ~765 tokens → ~685 tokens (resized to 1568×882)
+- 1920×5120: ~5,785 tokens → ~1,584 tokens (resized to 1200×3200)
+- 1920×8000: Falls back to viewport (~1,600 tokens)
+
+## Exit codes
+
+<ParamField path="0" type="number">
+  Success - screenshot captured
+</ParamField>
+
+<ParamField path="81" type="number">
+  INVALID_ARGUMENTS - invalid quality or dimensions
+</ParamField>
+
+<ParamField path="83" type="number">
+  RESOURCE_NOT_FOUND - element not found
+</ParamField>
+
+<ParamField path="87" type="number">
+  STALE_CACHE - cached index invalid
+</ParamField>
+
+<ParamField path="102" type="number">
+  CDP_TIMEOUT - CDP operation timed out
+</ParamField>
+
+## Troubleshooting
+
+### Element not captured
+
+```bash
+# Verify element exists
+bdg dom query "#element"
+
+# Check element dimensions
+bdg dom eval 'document.querySelector("#element").getBoundingClientRect()'
+
+# Scroll into view first
+bdg dom scroll "#element"
+bdg dom screenshot element.png --selector "#element"
+```
+
+### Image too small
+
+```bash
+# Disable auto-resize
+bdg dom screenshot full-res.png --no-resize
+
+# Or increase JPEG quality
+bdg dom screenshot high-quality.jpg --quality 100
+```
+
+### Missing lazy-loaded content
+
+```bash
+# Scroll to trigger loading
+bdg dom scroll --bottom
+bdg dom screenshot page.png
+
+# Or use --scroll option
+bdg dom screenshot page.png --scroll "footer"
+```
+
+## Related commands
+
+- [`bdg dom scroll`](/commands/dom/scroll) - Scroll before capturing
+- [`bdg dom query`](/commands/dom/query) - Find elements to capture
+- [`bdg dom eval`](/commands/dom/eval) - Check page state before capture

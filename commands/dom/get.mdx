@@ -1,0 +1,191 @@
+---
+title: "bdg dom get"
+description: "Get semantic accessibility structure or raw HTML for elements"
+---
+
+## Overview
+
+Retrieve element information in two modes:
+- **Semantic mode (default)**: 70-99% token reduction, returns `[Role] "Name" (properties)` format ideal for AI agents
+- **Raw mode (`--raw`)**: Full HTML with attributes for debugging and inspection
+
+## Syntax
+
+```bash
+bdg dom get <selector> [options]
+```
+
+## Arguments
+
+<ParamField path="selector" type="string" required>
+  CSS selector or numeric index from cached query results (0-based)
+</ParamField>
+
+## Options
+
+<ParamField path="--raw" type="flag">
+  Output raw HTML instead of semantic representation
+</ParamField>
+
+<ParamField path="--all" type="flag">
+  Get all matching elements (only with `--raw`)
+</ParamField>
+
+<ParamField path="--nth" type="number">
+  Get nth matching element, 0-based (only with `--raw`)
+</ParamField>
+
+<ParamField path="--node-id" type="number">
+  Use CDP nodeId directly (only with `--raw`)
+</ParamField>
+
+<ParamField path="--json" type="flag">
+  Output as JSON
+</ParamField>
+
+## Output modes
+
+### Semantic mode (default)
+
+Returns accessibility representation with role, name, and key properties:
+
+```bash
+$ bdg dom get "h1"
+[Heading L1] "Welcome to the Dashboard"
+
+$ bdg dom get "button"
+[Button] "Submit Form" (focusable)
+
+$ bdg dom get "#searchInput"
+[Searchbox] "Search" (focusable, required)
+```
+
+**Token efficiency:**
+- Simple elements: 45-75% reduction
+- Complex elements: 82-99% reduction
+- No CSS classes or non-semantic attributes
+
+### Raw HTML mode
+
+Returns complete HTML with all attributes:
+
+```bash
+$ bdg dom get "button" --raw
+<button type="submit" class="btn btn-primary" id="submit-btn" aria-label="Submit Form">
+  Submit Form
+</button>
+```
+
+## Examples
+
+### Get semantic representation
+
+```bash
+# By selector
+bdg dom get "button.primary"
+# [Button] "Submit" (focusable)
+
+# By cached index
+bdg dom query "button"
+bdg dom get 0
+# [Button] "Submit" (focusable)
+```
+
+### Get raw HTML
+
+```bash
+# First match
+bdg dom get "button" --raw
+
+# All matches
+bdg dom get "button" --raw --all
+
+# Specific match by index
+bdg dom get "button" --raw --nth 2
+
+# By CDP nodeId
+bdg dom get --raw --node-id 123
+```
+
+### Use with cached query results
+
+```bash
+# Step 1: Query and cache
+bdg dom query ".nav-link"
+# Found 5 elements
+
+# Step 2: Get details by index
+bdg dom get 0  # First nav link
+bdg dom get 4  # Last nav link
+```
+
+## Semantic output format
+
+### Role text
+
+- Heading levels: `[Heading L1]`, `[Heading L2]`, etc.
+- Standard roles: `[Button]`, `[Link]`, `[Textbox]`, etc.
+- First letter capitalized
+
+### Context
+
+- If accessible name exists: `"Name"`
+- Fallback to DOM context: `<tag.class> "text preview"`
+
+### Properties
+
+- `focusable` - Element can receive keyboard focus
+- `focused` - Element currently has focus
+- `disabled` - Element is disabled
+- `required` - Field is required
+- `(inferred from DOM)` - Role synthesized from HTML
+
+### Examples
+
+```bash
+[Heading L1] "Welcome"                          # Heading with name
+[Button] "Submit" (focusable)                   # Focusable button
+[Link] "Learn more" (focusable)                 # Focusable link
+[Searchbox] "Search" (focusable, required)      # Required searchbox
+[Textbox] <input.email> "user@" (focusable)     # Input with partial value
+[Navigation] "Main menu"                        # Navigation landmark
+[Paragraph]                                      # Paragraph without text
+```
+
+## When to use `--raw`
+
+Use raw HTML mode when you need:
+- Exact HTML structure with classes and attributes
+- Multiple elements (`--all`)
+- Specific element selection (`--nth`, `--node-id`)
+- CSS/HTML debugging
+- Data attributes or custom properties
+
+Use semantic mode (default) for:
+- AI agent automation
+- Token-efficient context
+- Accessibility-first element identification
+- Form field discovery
+
+## Exit codes
+
+<ParamField path="0" type="number">
+  Success - element retrieved
+</ParamField>
+
+<ParamField path="83" type="number">
+  RESOURCE_NOT_FOUND - element not found
+</ParamField>
+
+<ParamField path="87" type="number">
+  STALE_CACHE - cached index invalid (page navigation)
+</ParamField>
+
+<ParamField path="102" type="number">
+  CDP_TIMEOUT - CDP operation timed out
+</ParamField>
+
+## Related commands
+
+- [`bdg dom query`](/commands/dom/query) - Find elements and cache results
+- [`bdg dom a11y describe`](/commands/dom/a11y) - Get detailed accessibility properties

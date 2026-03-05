@@ -1,0 +1,298 @@
+---
+title: "network har"
+description: "Export network data as HAR 1.2 format"
+---
+
+## Synopsis
+
+Export captured network requests to HTTP Archive (HAR) 1.2 format for analysis, sharing, or import into other tools.
+
+```bash
+bdg network har [output-file] [options]
+```
+
+## Description
+
+The `network har` command exports all network requests from the current session (or from `session.json` if no active session) to HAR 1.2 format. HAR files can be imported into Chrome DevTools, HAR analyzers, performance tools, and other debugging utilities.
+
+If no output file is specified, generates a timestamped filename in `~/.bdg/capture-YYYY-MM-DD-HHMMSS.har`.
+
+Supports filtering with the same DevTools DSL syntax as `network list` to export only relevant requests.
+
+## Arguments
+
+<ParamField path="output-file" type="string" optional>
+  Path to output HAR file. If not provided, generates timestamped filename in `~/.bdg/` directory.
+  
+  **Examples:**
+  - `capture.har` - Save to current directory
+  - `/tmp/debug.har` - Absolute path
+  - `~/Desktop/session.har` - Home directory
+</ParamField>
+
+## Options
+
+<ParamField path="--json" type="flag">
+  Output result metadata in JSON format (file path, entry count, filter status).
+</ParamField>
+
+<ParamField path="--filter" type="string">
+  Filter requests using DevTools DSL syntax before exporting. Same syntax as `network list --filter`.
+  
+  **Examples:**
+  - `status-code:>=400` - Export only failed requests
+  - `domain:api.*` - Export only API requests
+  - `larger-than:100KB` - Export only large responses
+  - `!resource-type:Image,Media` - Exclude media files
+</ParamField>
+
+## Filter Syntax
+
+The `--filter` option uses Chrome DevTools filter DSL. See [network list](/commands/network/list#filter-syntax) for complete syntax reference.
+
+**Quick Reference:**
+
+```bash
+status-code:>=400              # Status codes with comparison
+domain:api.*                   # Domain with wildcards  
+method:POST                    # HTTP method
+mime-type:application/json     # MIME type
+resource-type:XHR,Fetch        # Resource types (comma-separated)
+larger-than:1MB                # Size threshold (B, KB, MB, GB)
+has-response-header:set-cookie # Header presence
+is:from-cache                  # Cached responses
+is:running                     # In-progress requests
+scheme:https                   # URL scheme
+!domain:cdn.*                  # Negation (exclude)
+```
+
+## Output Format
+
+### Human-readable (default)
+
+```bash
+✓ Exported 45 requests to /Users/user/.bdg/capture-2026-03-05-143022.har
+```
+
+With filter applied:
+
+```bash
+✓ Exported 12 requests (filtered) to /tmp/api-errors.har
+```
+
+### JSON Format
+
+```json
+{
+  "version": "1.2.3",
+  "success": true,
+  "data": {
+    "file": "/Users/user/.bdg/capture-2026-03-05-143022.har",
+    "entries": 45,
+    "filtered": false
+  }
+}
+```
+
+## HAR File Structure
+
+Generated HAR files conform to HAR 1.2 specification:
+
+```json
+{
+  "log": {
+    "version": "1.2",
+    "creator": {
+      "name": "bdg",
+      "version": "1.2.3"
+    },
+    "entries": [
+      {
+        "startedDateTime": "2026-03-05T14:30:22.123Z",
+        "time": 245,
+        "request": {
+          "method": "GET",
+          "url": "https://example.com/api/users",
+          "httpVersion": "HTTP/2",
+          "headers": [...],
+          "queryString": [...],
+          "cookies": [...],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "HTTP/2",
+          "headers": [...],
+          "cookies": [...],
+          "content": {
+            "size": 1234,
+            "mimeType": "application/json"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": 1234
+        },
+        "cache": {},
+        "timings": {
+          "send": 0,
+          "wait": 245,
+          "receive": 0
+        }
+      }
+    ]
+  }
+}
+```
+
+## Examples
+
+### Export all requests with auto-generated filename
+
+```bash
+bdg network har
+```
+
+### Export to specific file
+
+```bash
+bdg network har debug-session.har
+```
+
+### Export only failed requests
+
+```bash
+bdg network har errors.har --filter "status-code:>=400"
+```
+
+### Export API requests only
+
+```bash
+bdg network har api-calls.har --filter "resource-type:XHR,Fetch"
+```
+
+### Export excluding large media files
+
+```bash
+bdg network har lightweight.har --filter "!larger-than:500KB !resource-type:Image,Media"
+```
+
+### Export from stopped session
+
+```bash
+# HAR export works from session.json after session is stopped
+bdg stop
+bdg network har final-session.har
+```
+
+### Get export metadata as JSON
+
+```bash
+bdg network har capture.har --json
+```
+
+### Export specific domain's requests
+
+```bash
+bdg network har api-only.har --filter "domain:api.example.com"
+```
+
+## Use Cases
+
+### Import into Chrome DevTools
+
+1. Export HAR file: `bdg network har session.har`
+2. Open Chrome DevTools (F12)
+3. Go to Network tab
+4. Right-click → "Import HAR file"
+5. Select your exported file
+
+### Share debugging session
+
+```bash
+# Export filtered session for sharing with team
+bdg network har bug-reproduction.har --filter "domain:api.internal.*"
+```
+
+### Performance analysis
+
+```bash
+# Export for analysis in performance tools
+bdg network har perf-data.har
+# Use with webpagetest.org, HAR Analyzer, etc.
+```
+
+### Automated testing
+
+```bash
+# Export and validate in CI/CD
+bdg network har test-run.har --filter "status-code:>=400"
+if [ $? -eq 0 ]; then
+  # Check if any errors were exported
+  entries=$(jq '.log.entries | length' test-run.har)
+  if [ $entries -gt 0 ]; then
+    echo "Found $entries failed requests"
+    exit 1
+  fi
+fi
+```
+
+## Exit Codes
+
+<ResponseField name="0" type="SUCCESS">
+  HAR file exported successfully
+</ResponseField>
+
+<ResponseField name="81" type="INVALID_ARGUMENTS">
+  Invalid filter syntax or malformed filter DSL
+</ResponseField>
+
+<ResponseField name="83" type="RESOURCE_NOT_FOUND">
+  No active session and no `session.json` file found
+</ResponseField>
+
+<ResponseField name="101" type="CDP_CONNECTION_FAILURE">
+  Failed to connect to daemon (for live session)
+</ResponseField>
+
+<ResponseField name="103" type="SESSION_FILE_ERROR">
+  Failed to write HAR file (check permissions and disk space)
+</ResponseField>
+
+## Tips
+
+<Tip>
+  **Offline Export**: HAR export works from `session.json` even after stopping the session:
+  ```bash
+  bdg stop
+  bdg network har archived-session.har
+  ```
+</Tip>
+
+<Tip>
+  **Filter Before Export**: Use `--filter` to reduce HAR file size:
+  ```bash
+  # Export only relevant requests instead of full session
+  bdg network har --filter "domain:api.* status-code:>=400"
+  ```
+</Tip>
+
+<Tip>
+  **Timestamped Backups**: Without specifying output file, bdg creates timestamped files:
+  ```bash
+  bdg network har  # Creates capture-2026-03-05-143022.har
+  bdg network har  # Creates capture-2026-03-05-143145.har (different timestamp)
+  ```
+</Tip>
+
+<Warning>
+  HAR files may contain sensitive data (cookies, authorization headers, POST data). Review before sharing externally.
+</Warning>
+
+## See Also
+
+- [network list](/commands/network/list) - List and filter network requests
+- [network headers](/commands/network/headers) - Inspect HTTP headers
+- [peek](/commands/peek) - Quick session overview
+- [stop](/commands/stop) - Stop session and save to session.json

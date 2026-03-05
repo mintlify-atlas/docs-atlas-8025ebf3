@@ -1,0 +1,286 @@
+---
+title: "network list"
+description: "List network requests with DevTools-compatible filtering"
+---
+
+## Synopsis
+
+List network requests captured during the current session with powerful filtering capabilities using Chrome DevTools filter syntax.
+
+```bash
+bdg network list [options]
+```
+
+## Description
+
+The `network list` command displays all HTTP requests captured during the active session. It supports DevTools-compatible filter DSL for precise query control, predefined filter presets for common use cases, and resource type filtering.
+
+By default, shows the last 100 requests. Use `--last 0` to show all requests.
+
+## Options
+
+<ParamField path="--json" type="flag">
+  Output results in JSON format for programmatic consumption.
+</ParamField>
+
+<ParamField path="--filter" type="string">
+  Filter requests using DevTools DSL syntax. Supports domain matching, status codes, HTTP methods, MIME types, size thresholds, and more.
+  
+  **Examples:**
+  - `status-code:>=400` - Failed requests
+  - `domain:api.*` - Requests to API domains (wildcards supported)
+  - `method:POST` - POST requests only
+  - `larger-than:1MB` - Responses over 1MB
+  - `!domain:cdn.*` - Exclude CDN requests (use `!` for negation)
+</ParamField>
+
+<ParamField path="--preset" type="string">
+  Use a predefined filter preset. Available presets:
+  
+  - `errors` - Failed requests (4xx and 5xx status codes)
+  - `api` - API requests (XHR and Fetch)
+  - `large` - Large responses (>1MB)
+  - `cached` - Cached responses
+  - `documents` - HTML documents only
+  - `media` - Images, video, and audio
+  - `scripts` - JavaScript files
+  - `pending` - In-progress requests (no response yet)
+</ParamField>
+
+<ParamField path="--type" type="string">
+  Filter by resource type. Comma-separated list of CDP resource types:
+  `Document`, `XHR`, `Fetch`, `Script`, `Stylesheet`, `Image`, `Media`, `Font`, `Other`
+  
+  **Example:** `--type XHR,Fetch`
+</ParamField>
+
+<ParamField path="--last" type="number" default="100">
+  Show last N requests. Set to `0` to show all requests. Range: 0-10000.
+</ParamField>
+
+<ParamField path="-f, --follow" type="flag">
+  Stream network requests in real-time (updates every second). Shows last 50 requests. Press Ctrl+C to stop.
+</ParamField>
+
+<ParamField path="-v, --verbose" type="flag">
+  Show full URLs and additional details instead of truncated output.
+</ParamField>
+
+## Filter Syntax
+
+The `--filter` option uses Chrome DevTools filter DSL syntax:
+
+### Status Codes
+```bash
+status-code:404          # Exact match
+status-code:>=400        # Comparison operators: =, >=, <=, >, <
+```
+
+### Domain Matching
+```bash
+domain:api.example.com   # Exact match
+domain:api.*             # Wildcard patterns
+```
+
+### HTTP Methods
+```bash
+method:POST              # Case-insensitive
+```
+
+### MIME Types
+```bash
+mime-type:application/json
+mime-type:text/html
+```
+
+### Resource Types
+```bash
+resource-type:XHR,Fetch  # Comma-separated list
+```
+
+### Size Filters
+```bash
+larger-than:100KB        # Supports B, KB, MB, GB
+larger-than:>=1MB        # With comparison operators
+```
+
+### Header Inspection
+```bash
+has-response-header:set-cookie
+```
+
+### State Filters
+```bash
+is:from-cache            # Cached responses
+is:running               # In-progress requests
+```
+
+### URL Scheme
+```bash
+scheme:https
+```
+
+### Negation
+```bash
+!domain:cdn.*                    # Exclude matching requests
+--filter="!method:POST"          # Use quotes with CLI
+```
+
+### Multiple Filters
+```bash
+# Combine multiple filters (AND logic)
+--filter="domain:api.* status-code:>=400"
+```
+
+## Output Format
+
+### Human-readable (default)
+
+```
+NETWORK REQUESTS (last 100 of 247)
+────────────────────────────────────────────────────────────────────────────────
+[ID]   STS METH TYP     SIZE  URL
+────────────────────────────────────────────────────────────────────────────────
+[001]  200 GET  DOC   45.2 KB  https://example.com/
+[002]  200 GET  CSS   12.3 KB  https://example.com/styles.css
+[003]  200 GET  JS   234.5 KB  https://example.com/app.js
+[004]  200 GET  XHR    2.1 KB  https://api.example.com/users
+[005]  404 GET  IMG        -   https://example.com/missing.png
+```
+
+**Column Reference:**
+- `ID` - Request identifier (use with `bdg details --network <id>`)
+- `STS` - HTTP status code (or `PND` for pending requests)
+- `METH` - HTTP method
+- `TYP` - Resource type abbreviation (DOC, CSS, JS, XHR, IMG, etc.)
+- `SIZE` - Encoded response size
+- `URL` - Request URL (truncated unless `--verbose`)
+
+### JSON Format
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "requestId": "001",
+      "url": "https://example.com/",
+      "method": "GET",
+      "status": 200,
+      "resourceType": "Document",
+      "mimeType": "text/html",
+      "encodedDataLength": 46284,
+      "timestamp": 1234567890.123,
+      "requestHeaders": { "user-agent": "..." },
+      "responseHeaders": { "content-type": "text/html" }
+    }
+  ],
+  "count": 5,
+  "totalCount": 247,
+  "filtered": true
+}
+```
+
+## Examples
+
+### List all requests
+
+```bash
+bdg network list --last 0
+```
+
+### Find failed requests
+
+```bash
+bdg network list --preset errors
+# or
+bdg network list --filter "status-code:>=400"
+```
+
+### Filter API requests to specific domain
+
+```bash
+bdg network list --filter "domain:api.example.com resource-type:XHR,Fetch"
+```
+
+### Find large images
+
+```bash
+bdg network list --type Image --filter "larger-than:500KB"
+```
+
+### Exclude third-party requests
+
+```bash
+bdg network list --filter "!domain:cdn.* !domain:analytics.*"
+```
+
+### Stream requests in real-time
+
+```bash
+bdg network list --follow
+```
+
+### Get JSON output for processing
+
+```bash
+bdg network list --json | jq '.data[] | select(.status >= 400)'
+```
+
+### Combine preset with additional filters
+
+```bash
+bdg network list --preset api --filter "domain:api.example.com"
+```
+
+### Find slow requests (over 1 second response time)
+
+```bash
+bdg network list --json | jq '.data[] | select(.duration > 1000)'
+```
+
+## Exit Codes
+
+<ResponseField name="0" type="SUCCESS">
+  Requests listed successfully (may return empty list)
+</ResponseField>
+
+<ResponseField name="81" type="INVALID_ARGUMENTS">
+  Invalid filter syntax, unknown preset, invalid resource type, or `--last` value out of range (0-10000)
+</ResponseField>
+
+<ResponseField name="83" type="RESOURCE_NOT_FOUND">
+  No active session found
+</ResponseField>
+
+<ResponseField name="101" type="CDP_CONNECTION_FAILURE">
+  Failed to connect to daemon
+</ResponseField>
+
+## Tips
+
+<Tip>
+  **Performance**: When working with many requests, use filters to reduce output size. The `--last` option limits display but doesn't affect filtering logic - filters are applied to all requests first, then `--last` limits the display.
+</Tip>
+
+<Tip>
+  **Preset + Filter**: You can combine `--preset` with `--filter` to build on existing presets:
+  ```bash
+  bdg network list --preset api --filter "domain:api.internal.*"
+  ```
+</Tip>
+
+<Tip>
+  **Negation Syntax**: Use `!` for negation instead of `-` to avoid conflicts with CLI flags. If needed, use quotes: `--filter="-domain:cdn.*"`
+</Tip>
+
+<Warning>
+  The `--follow` mode shows the last 50 requests and updates every second. For high-traffic sites, you may miss requests between updates.
+</Warning>
+
+## See Also
+
+- [network har](/commands/network/har) - Export requests to HAR format
+- [network headers](/commands/network/headers) - Inspect HTTP headers
+- [peek](/commands/peek) - Quick overview of session data
+- [details](/commands/details) - Get full details for a specific request

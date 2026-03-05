@@ -1,0 +1,622 @@
+---
+title: Troubleshooting
+description: Common issues, diagnostic commands, and solutions for Browser Debugger CLI
+---
+
+## Diagnostic Commands
+
+### Check Session Status
+
+```bash
+bdg status
+```
+
+**Basic output**:
+```
+Session Status: Active
+Worker PID:     12345
+Chrome PID:     12346
+Target URL:     http://localhost:3000/
+Uptime:         5m 23s
+```
+
+### Verbose Diagnostics
+
+```bash
+bdg status --verbose
+```
+
+**Includes Chrome diagnostics**:
+```
+Session Status: Active
+Worker PID:     12345
+Chrome PID:     12346
+Target URL:     http://localhost:3000/
+Uptime:         5m 23s
+
+Chrome Diagnostics:
+Binary:           /usr/bin/google-chrome
+Port:             9222
+Installations:    2 found
+  [1] /usr/bin/google-chrome
+  [2] /snap/bin/chromium
+```
+
+### Clean Up Stale Sessions
+
+```bash
+bdg cleanup
+```
+
+**With options**:
+```bash
+bdg cleanup --force        # Force cleanup even if session appears active
+bdg cleanup --aggressive   # Kill all Chrome processes
+bdg cleanup --remove-output # Also remove session.json
+```
+
+## Common Issues
+
+### Session Already Running
+
+**Error**:
+```bash
+bdg localhost:3000
+# Error: Session already running (PID: 12345)
+# Suggestion: Stop current session with: bdg stop
+```
+
+**Exit Code**: `84` (RESOURCE_ALREADY_EXISTS)
+
+**Solutions**:
+
+<AccordionGroup>
+  <Accordion title="Stop gracefully">
+    ```bash
+    bdg stop
+    bdg localhost:3000
+    ```
+  </Accordion>
+
+  <Accordion title="Force cleanup">
+    If `bdg stop` hangs or fails:
+    ```bash
+    bdg cleanup --force
+    bdg localhost:3000
+    ```
+  </Accordion>
+
+  <Accordion title="Kill Chrome processes">
+    If session is unresponsive:
+    ```bash
+    bdg cleanup --aggressive
+    bdg localhost:3000
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### No Active Session
+
+**Error**:
+```bash
+bdg status
+# Error: No active session found
+# Suggestion: Start a session with: bdg <url>
+```
+
+**Exit Code**: `83` (RESOURCE_NOT_FOUND)
+
+**Solution**:
+```bash
+bdg localhost:3000
+```
+
+### Chrome Launch Failure
+
+**Error**:
+```bash
+bdg localhost:3000
+# Error: Chrome failed to launch
+# Chrome not found in standard locations
+# Tried: /usr/bin/google-chrome, /usr/bin/chromium, ...
+```
+
+**Exit Code**: `100` (CHROME_LAUNCH_FAILURE)
+
+**Solutions**:
+
+<AccordionGroup>
+  <Accordion title="Install Chrome/Chromium">
+    **Ubuntu/Debian**:
+    ```bash
+    sudo apt update
+    sudo apt install chromium-browser
+    ```
+
+    **macOS**:
+    ```bash
+    brew install --cask google-chrome
+    ```
+
+    **Fedora/RHEL**:
+    ```bash
+    sudo dnf install chromium
+    ```
+  </Accordion>
+
+  <Accordion title="Specify Chrome path">
+    If Chrome is installed in non-standard location:
+    ```bash
+    export CHROME_PATH=/path/to/chrome
+    bdg localhost:3000
+    ```
+  </Accordion>
+
+  <Accordion title="Check diagnostics">
+    ```bash
+    bdg status --verbose
+    ```
+    Shows detected Chrome installations and paths.
+  </Accordion>
+</AccordionGroup>
+
+### Port Conflict
+
+**Error**:
+```bash
+bdg localhost:3000
+# Error: Chrome failed to launch
+# Port 9222 is already in use
+# Another Chrome instance may be running
+```
+
+**Exit Code**: `100` (CHROME_LAUNCH_FAILURE)
+
+**Solutions**:
+
+<AccordionGroup>
+  <Accordion title="Use different port">
+    ```bash
+    bdg localhost:3000 --port 9223
+    ```
+  </Accordion>
+
+  <Accordion title="Kill conflicting Chrome">
+    ```bash
+    # Find process using port 9222
+    lsof -i :9222
+    
+    # Kill it
+    kill <PID>
+    
+    # Or use aggressive cleanup
+    bdg cleanup --aggressive
+    ```
+  </Accordion>
+
+  <Accordion title="Check for stale processes">
+    ```bash
+    ps aux | grep chrome
+    # Manually kill stale Chrome processes
+    kill <PID>
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Element Not Found (Stale Cache)
+
+**Error**:
+```bash
+bdg dom query "button"  # Returns [0], [1], [2]
+# Page navigates
+bdg dom click 0
+# Error: Element at index 0 not accessible
+# Suggestion: Re-run query to refresh cache
+```
+
+**Exit Code**: `87` (STALE_CACHE)
+
+**Explanation**: DOM nodeIds become invalid after navigation or DOM changes.
+
+**Solution**:
+```bash
+# Re-run query to get fresh indices
+bdg dom query "button"
+# Use new index
+bdg dom click 0
+```
+
+**Prevention**: Run query immediately before interaction, or use selectors directly:
+```bash
+bdg dom click "button.submit"  # Uses selector, not cached index
+```
+
+### CDP Timeout
+
+**Error**:
+```bash
+bdg dom eval "while(true) {}"
+# Error: CDP operation timed out (10s)
+```
+
+**Exit Code**: `102` (CDP_TIMEOUT)
+
+**Common Causes**:
+- Page unresponsive
+- Infinite loop in JavaScript
+- Heavy computation
+
+**Solutions**:
+
+<AccordionGroup>
+  <Accordion title="Reload page">
+    ```bash
+    bdg stop
+    bdg localhost:3000
+    ```
+  </Accordion>
+
+  <Accordion title="Check page state">
+    ```bash
+    bdg status --verbose
+    # Check if page is responsive
+    ```
+  </Accordion>
+
+  <Accordion title="Simplify operation">
+    Break complex operations into smaller steps.
+  </Accordion>
+</AccordionGroup>
+
+### Permission Denied
+
+**Error**:
+```bash
+bdg localhost:3000
+# Error: Permission denied: Cannot write to ~/.bdg/session.json
+```
+
+**Exit Code**: `82` (PERMISSION_DENIED)
+
+**Solutions**:
+
+<AccordionGroup>
+  <Accordion title="Fix permissions">
+    ```bash
+    # Check current permissions
+    ls -la ~/.bdg/
+    
+    # Fix ownership
+    sudo chown -R $USER:$USER ~/.bdg/
+    
+    # Fix permissions
+    chmod -R 755 ~/.bdg/
+    ```
+  </Accordion>
+
+  <Accordion title="Clean and retry">
+    ```bash
+    # Remove and recreate directory
+    rm -rf ~/.bdg/
+    bdg localhost:3000
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Daemon Not Running
+
+**Error**:
+```bash
+bdg status
+# Error: Cannot connect to daemon
+# Suggestion: Daemon not running - it will auto-start on next session
+```
+
+**Exit Code**: `101` (CDP_CONNECTION_FAILURE)
+
+**Explanation**: Daemon auto-starts when needed. This error usually means daemon crashed.
+
+**Solutions**:
+
+<AccordionGroup>
+  <Accordion title="Clean and restart">
+    ```bash
+    bdg cleanup --force
+    bdg localhost:3000  # Daemon auto-starts
+    ```
+  </Accordion>
+
+  <Accordion title="Check for stale files">
+    ```bash
+    ls -la ~/.bdg/
+    # Look for daemon.pid, daemon.sock
+    
+    # Remove if stale
+    rm ~/.bdg/daemon.pid ~/.bdg/daemon.sock
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Session Files
+
+### Location
+
+All session files are in `~/.bdg/`:
+
+```bash
+ls -la ~/.bdg/
+```
+
+```
+drwxr-xr-x  5 user user 4096 Mar  5 21:00 .
+drwxr-xr-x 30 user user 4096 Mar  5 20:50 ..
+-rw-r--r--  1 user user    5 Mar  5 21:00 daemon.pid
+srwxr-xr-x  1 user user    0 Mar  5 21:00 daemon.sock
+-rw-r--r--  1 user user    0 Mar  5 21:00 daemon.lock
+-rw-r--r--  1 user user    5 Mar  5 21:01 session.pid
+-rw-r--r--  1 user user  456 Mar  5 21:01 session.meta.json
+drwxr-xr-x  8 user user 4096 Mar  5 21:01 chrome-profile/
+```
+
+### File Descriptions
+
+| File | Purpose | When Created | When Removed |
+|------|---------|--------------|-------------|
+| `daemon.pid` | Daemon process ID | Daemon start | Daemon exit |
+| `daemon.sock` | Unix socket for IPC | Daemon start | Daemon exit |
+| `daemon.lock` | Atomic lock during startup | Daemon launch | After startup |
+| `session.pid` | Worker process ID | Session start | Session stop |
+| `session.meta.json` | Session metadata | Session start | Session stop |
+| `session.json` | Final telemetry output | Session stop | Manual removal |
+| `chrome-profile/` | Chrome user data | Session start | Session stop |
+
+### Inspecting Session Metadata
+
+```bash
+cat ~/.bdg/session.meta.json | jq
+```
+
+```json
+{
+  "bdgPid": 12345,
+  "chromePid": 12346,
+  "startTime": "2025-03-05T21:00:00.000Z",
+  "port": 9222,
+  "targetId": "ABC123",
+  "webSocketDebuggerUrl": "ws://localhost:9222/devtools/page/ABC123",
+  "activeTelemetry": ["network", "console", "dom"]
+}
+```
+
+### Manual Cleanup
+
+<Warning>
+  Manual cleanup should be a last resort. Use `bdg cleanup` when possible.
+</Warning>
+
+```bash
+# Stop all bdg processes
+kill $(cat ~/.bdg/daemon.pid 2>/dev/null)
+kill $(cat ~/.bdg/session.pid 2>/dev/null)
+
+# Kill Chrome
+kill $(cat ~/.bdg/session.meta.json 2>/dev/null | jq -r '.chromePid')
+
+# Remove all session files
+rm -rf ~/.bdg/*
+
+# Start fresh
+bdg localhost:3000
+```
+
+## Debugging Tips
+
+### Check Process Tree
+
+```bash
+# View all bdg processes
+ps aux | grep -E "bdg|chrome" | grep -v grep
+
+# View process tree
+pstree -p $(cat ~/.bdg/daemon.pid 2>/dev/null)
+```
+
+**Expected tree**:
+```
+node(12344) daemon.js
+  └─node(12345) worker.js
+      └─chrome(12346)
+```
+
+### Check Port Usage
+
+```bash
+# Find what's using CDP port
+lsof -i :9222
+
+# Find all listening ports
+lsof -i -P | grep LISTEN | grep chrome
+```
+
+### Enable Debug Logging
+
+```bash
+# Worker logs to stderr (captured by daemon)
+tail -f /tmp/worker-stderr.log  # If logging enabled
+
+# Daemon logs
+tail -f /tmp/daemon-stderr.log  # If logging enabled
+```
+
+### Test IPC Connection
+
+```bash
+# Send handshake to daemon
+echo '{"type":"handshake_request","sessionId":"test"}' | nc -U ~/.bdg/daemon.sock
+
+# Expected response:
+# {"type":"handshake_response","sessionId":"test","status":"ok",...}
+```
+
+## Performance Issues
+
+### Slow Session Start
+
+**Symptoms**: `bdg localhost:3000` takes >10 seconds
+
+**Common Causes**:
+
+<AccordionGroup>
+  <Accordion title="Chrome startup slow">
+    - Insufficient RAM
+    - Many extensions installed
+    - Large Chrome profile
+
+    **Solution**: Use `--headless` mode for faster startup:
+    ```bash
+    bdg localhost:3000 --headless
+    ```
+  </Accordion>
+
+  <Accordion title="Page load slow">
+    - Heavy page with many resources
+    - Slow network
+
+    **Solution**: Use `--timeout` to avoid waiting:
+    ```bash
+    bdg localhost:3000 --timeout 5
+    ```
+  </Accordion>
+
+  <Accordion title="Port probe timeout">
+    - CDP port unreachable
+    - Firewall blocking
+
+    **Check with**:
+    ```bash
+    curl http://localhost:9222/json/version
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### High Memory Usage
+
+**Symptoms**: Chrome process using excessive RAM
+
+**Solutions**:
+
+<AccordionGroup>
+  <Accordion title="Use headless mode">
+    ```bash
+    bdg localhost:3000 --headless
+    ```
+    Reduces memory footprint by 30-50%.
+  </Accordion>
+
+  <Accordion title="Disable collectors">
+    ```bash
+    bdg localhost:3000 --no-network --no-console
+    ```
+    Reduces telemetry overhead.
+  </Accordion>
+
+  <Accordion title="Stop session when done">
+    ```bash
+    bdg stop
+    ```
+    Releases all memory and processes.
+  </Accordion>
+</AccordionGroup>
+
+## Error Messages Reference
+
+### Common Error Patterns
+
+#### "Session not found"
+```
+Error: No active session found
+Suggestion: Start a session with: bdg <url>
+Exit Code: 83
+```
+
+**Meaning**: No worker process running
+
+**Fix**: Start a session
+
+#### "Element not accessible"
+```
+Error: Element at index 0 not accessible
+Suggestion: Re-run query to refresh cache
+Exit Code: 87
+```
+
+**Meaning**: DOM nodeId is stale
+
+**Fix**: Re-run `bdg dom query`
+
+#### "Worker response timeout"
+```
+Error: Worker response timeout (10s)
+Exit Code: 102
+```
+
+**Meaning**: Worker didn't respond in time
+
+**Fix**: Check if page is responsive, reload if needed
+
+#### "Cannot connect to daemon"
+```
+Error: Cannot connect to daemon
+Suggestion: Daemon not running - it will auto-start on next session
+Exit Code: 101
+```
+
+**Meaning**: Daemon crashed or not running
+
+**Fix**: Use `bdg cleanup --force` and retry
+
+## Getting Help
+
+### Report Issues
+
+If you encounter a bug or unexpected behavior:
+
+1. **Collect diagnostics**:
+   ```bash
+   bdg status --verbose > diagnostics.txt
+   ls -la ~/.bdg/ >> diagnostics.txt
+   ```
+
+2. **Capture error output**:
+   ```bash
+   bdg your-command 2>&1 | tee error.log
+   ```
+
+3. **Report at**: [GitHub Issues](https://github.com/browser-debugger/bdg/issues)
+
+### Self-Documenting Help
+
+```bash
+# Get JSON documentation for automation
+bdg --help --json
+
+# Explore CDP domains
+bdg cdp --list
+
+# Search for methods
+bdg cdp --search cookie
+
+# Describe method
+bdg cdp Network.getCookies --describe
+```
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Exit Codes" icon="traffic-light" href="/advanced/exit-codes">
+    Complete exit code reference
+  </Card>
+  <Card title="Architecture" icon="diagram-project" href="/advanced/architecture">
+    Understanding bdg's internals
+  </Card>
+</CardGroup>

@@ -1,0 +1,206 @@
+---
+title: Sessions
+description: Understanding the daemon architecture and session lifecycle
+---
+
+## Overview
+
+Browser Debugger CLI uses a **daemon architecture** to maintain persistent connections to Chrome while supporting multiple CLI commands. This design enables:
+
+- Long-running telemetry collection without keeping CLI commands open
+- Multiple commands interacting with the same browser session
+- Clean separation between CLI interface and browser connection management
+
+## Architecture
+
+```text
+CLI Command → Unix Socket → Daemon → Worker → CDP → Chrome
+```
+
+**Components:**
+
+- **CLI Command**: User-facing commands (`bdg status`, `bdg peek`, etc.)
+- **Unix Socket**: IPC transport at `~/.bdg/daemon.sock` using JSONL protocol
+- **Daemon** (`src/daemon/ipcServer.ts`): Routes requests and manages worker lifecycle
+- **Worker** (`src/daemon/worker.ts`): Detached process handling CDP connection and telemetry
+- **CDP Connection** (`src/connection/cdp.ts`): WebSocket connection to Chrome DevTools Protocol
+
+## Session Lifecycle
+
+### Starting a Session
+
+```bash
+bdg https://example.com
+```
+
+**What happens:**
+
+1. CLI checks if daemon is already running (reads `~/.bdg/daemon.pid`)
+2. If no daemon exists, spawns daemon process
+3. Daemon spawns worker process with session config
+4. Worker launches Chrome and establishes CDP connection
+5. Worker sends `worker_ready` signal with Chrome PID and port
+6. Session metadata written to `~/.bdg/session.meta.json`
+7. CLI returns control to user while worker continues collecting telemetry
+
+**Key files created:**
+
+```bash
+~/.bdg/
+├── daemon.pid          # Daemon process ID
+├── daemon.sock         # Unix domain socket for IPC
+└── session.meta.json   # Session metadata (Chrome PID, port, target URL)
+```
+
+**Session metadata structure** (`src/session/metadata.ts:22`):
+
+```typescript
+interface SessionMetadata {
+  bdgPid: number;                    // Worker process ID
+  chromePid?: number;                // Chrome browser process ID
+  startTime: number;                 // Session start timestamp
+  port: number;                      // CDP port (default: 9222)
+  targetId?: string;                 // Chrome target ID
+  webSocketDebuggerUrl?: string;     // CDP WebSocket URL
+  activeTelemetry?: TelemetryType[]; // Active collectors
+}
+```
+
+### Checking Session Status
+
+```bash
+bdg status
+bdg status --verbose  # Detailed diagnostics
+```
+
+**Status checks** (`src/daemon/handlers/requestHandlers.ts`):
+
+- Daemon running: Checks if PID in `daemon.pid` is alive
+- Worker running: Verifies worker process via metadata
+- Chrome running: Validates Chrome PID from metadata
+- CDP connection: Tests WebSocket connection health
+
+### Stopping a Session
+
+```bash
+bdg stop
+```
+
+**Shutdown sequence:**
+
+1. CLI sends `stop_session_request` via socket
+2. Worker receives signal and begins graceful shutdown:
+   - Closes CDP connection
+   - Terminates Chrome browser
+   - Writes final telemetry to `~/.bdg/session.json`
+3. Daemon cleans up socket and PID files
+4. All processes terminate
+
+**Output file** (`~/.bdg/session.json`):
+
+```json
+{
+  "version": "1.0.0",
+  "session": {
+    "startTime": 1709676000000,
+    "endTime": 1709676300000,
+    "duration": 300000,
+    "url": "https://example.com"
+  },
+  "network": {
+    "requests": [...],
+    "summary": {...}
+  },
+  "console": {
+    "messages": [...]
+  },
+  "dom": {...}
+}
+```
+
+## Session Files
+
+All session files are stored in `~/.bdg/` directory (`src/session/paths.ts:18`):
+
+| File | Purpose | Lifecycle |
+|------|---------|----------|
+| `daemon.pid` | Daemon process ID for liveness checks | Created on daemon start, removed on stop |
+| `daemon.sock` | Unix domain socket for IPC | Created on daemon start, removed on stop |
+| `session.meta.json` | Live session metadata | Created when worker starts, removed on cleanup |
+| `session.json` | Final telemetry output | Created on `bdg stop`, persists after session |
+
+## Worker Process Communication
+
+### Worker Ready Signal
+
+When the worker successfully connects to Chrome, it sends a ready message via stdout (`src/daemon/worker.ts:46`):
+
+```typescript
+interface WorkerReadyMessage {
+  type: 'worker_ready';
+  workerPid: number;      // Worker process ID
+  chromePid: number;      // Chrome browser PID
+  port: number;           // CDP port
+  target: {
+    url: string;          // Target URL
+    title?: string;       // Page title (if available)
+  };
+}
+```
+
+### IPC Protocol
+
+All daemon-worker communication uses **JSONL** (JSON Lines) format over Unix sockets and stdin/stdout (`src/daemon/ipcServer.ts:128`):
+
+- Each message is a single line of JSON
+- Messages are delimited by newline characters
+- Supports request/response correlation via `sessionId` field
+
+**Example message:**
+
+```json
+{"type":"peek_request","sessionId":"req_123","requestId":"1"}
+```
+
+## Error Handling
+
+### Worker Startup Failures
+
+If the worker fails to start, it throws `WorkerStartError` with semantic error codes (`src/daemon/startSession.ts:91`):
+
+- `SPAWN_FAILED`: Worker process failed to spawn
+- `READY_TIMEOUT`: Worker didn't send ready signal within 40 seconds
+- `WORKER_CRASH`: Worker exited before sending ready signal
+- `INVALID_READY_MESSAGE`: Worker sent malformed ready message
+
+### Stale Sessions
+
+If daemon/worker crashes, files may be left in `~/.bdg/`. Use cleanup commands:
+
+```bash
+bdg cleanup            # Remove stale session files
+bdg cleanup --force    # Kill stale processes
+bdg cleanup --aggressive  # Kill all Chrome processes
+```
+
+## Best Practices
+
+<Tip>
+**For long-running sessions**: Use `bdg peek` to inspect telemetry without stopping the session.
+</Tip>
+
+<Warning>
+**Only one session at a time**: Starting a new session while one is active will fail with `DAEMON_ALREADY_RUNNING` (exit code 86).
+</Warning>
+
+<Note>
+**Session persistence**: The `session.json` file persists after stopping, allowing offline analysis with commands like `bdg network list session.json`.
+</Note>
+
+## Related Commands
+
+- [`bdg start`](/commands/start) - Start a new session
+- [`bdg status`](/commands/status) - Check session status
+- [`bdg stop`](/commands/stop) - Stop session and write output
+- [`bdg cleanup`](/commands/cleanup) - Clean up stale sessions
+- [`bdg peek`](/commands/peek) - Preview live telemetry

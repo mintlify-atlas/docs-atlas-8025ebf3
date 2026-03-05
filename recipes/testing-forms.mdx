@@ -1,0 +1,387 @@
+---
+title: "Testing Form Validation"
+description: "Systematically test form fields with valid and invalid inputs to find validation bugs"
+---
+
+Form validation is critical for data integrity and user experience. This recipe demonstrates how to use **bdg** to test all form fields with edge cases and identify validation gaps.
+
+## Scenario
+
+You're testing a registration form at `https://testpages.eviltester.com/styled/validation/input-validation.html` that has multiple input types:
+
+- Text fields with length restrictions
+- Email fields with format validation
+- Numeric fields with range limits
+- Required checkboxes
+
+You need to verify that validation works correctly for both valid and invalid inputs.
+
+## Workflow
+
+<Steps>
+  <Step title="Start session and discover form structure">
+    Navigate to the form and use the form discovery command to see all fields.
+
+    ```bash
+    bdg https://testpages.eviltester.com/styled/validation/input-validation.html
+
+    # Discover all form fields with current state
+    bdg dom form
+    ```
+
+    **Expected output:**
+    ```text
+    FORMS DISCOVERED: 1
+    ══════════════════════════════════════════════════════════════
+
+    Form: "Input Validation Test"
+    ──────────────────────────────────────────────────────────────
+       #  Type      Label              Value     Status
+    ──────────────────────────────────────────────────────────────
+       0  text      First Name*        empty     required
+       1  email     Email Address*     empty     required  
+       2  number    Age                empty     ok
+       3  password  Password*          empty     required
+       4  checkbox  Accept Terms*      unchecked required
+    ──────────────────────────────────────────────────────────────
+       5  button    Submit             (primary) enabled
+    ══════════════════════════════════════════════════════════════
+    Summary: 0/5 fields filled | 4 required remaining | NOT ready
+
+    Remaining:
+      bdg dom fill 0 "<value>"    # First Name
+      bdg dom fill 1 "<value>"    # Email Address
+      bdg dom fill 3 "<value>"    # Password
+      bdg dom click 4              # Accept Terms
+    ```
+
+    The form discovery shows field indices, types, validation state, and ready-to-use commands.
+  </Step>
+
+  <Step title="Test required field validation">
+    Attempt to submit the form without filling required fields.
+
+    ```bash
+    # Try clicking submit with empty required fields
+    bdg dom click 5
+
+    # Check for validation messages in DOM
+    bdg dom query ".error-message"
+    bdg dom query "[aria-invalid='true']"
+
+    # Check console for validation errors
+    bdg console
+    ```
+
+    **Expected output:**
+    ```text
+    Found 4 nodes matching: [aria-invalid='true']
+    [0] <input name="firstName" aria-invalid="true" aria-describedby="error-firstName">
+    [1] <input name="email" aria-invalid="true">
+    [2] <input name="password" aria-invalid="true">
+    [3] <input name="terms" aria-invalid="true">
+    ```
+  </Step>
+
+  <Step title="Test each field with invalid inputs">
+    Systematically test boundary conditions and invalid formats.
+
+    ```bash
+    # Test email with invalid formats
+    bdg dom fill 1 "not-an-email"
+    bdg dom click 5
+    bdg dom query "#email-error" --json | jq -r '.data.nodes[0].text'
+
+    bdg dom fill 1 "missing-at-sign.com"
+    bdg dom click 5
+
+    bdg dom fill 1 "no-domain@"
+    bdg dom click 5
+
+    # Test age field with out-of-range values
+    bdg dom fill 2 "-5"          # Negative number
+    bdg dom fill 2 "999"         # Too large
+    bdg dom fill 2 "abc"         # Non-numeric
+
+    # Test password with weak inputs
+    bdg dom fill 3 "123"         # Too short
+    bdg dom fill 3 "password"    # Too common
+    ```
+
+    After each invalid input, check for error messages:
+    ```bash
+    bdg dom query ".error-message" --json | jq '.data.nodes[] | {text: .text}'
+    ```
+  </Step>
+
+  <Step title="Test field length restrictions">
+    Test minimum and maximum length constraints.
+
+    ```bash
+    # Test minimum length (assuming first name requires 2+ chars)
+    bdg dom fill 0 "A"
+    bdg dom click 5
+    bdg dom eval 'document.querySelector("[name=firstName]").validationMessage'
+
+    # Test maximum length (if field has maxlength)
+    bdg dom eval 'document.querySelector("[name=firstName]").maxLength'
+
+    # Fill with string exceeding max length
+    bdg dom fill 0 "$(printf 'A%.0s' {1..100})"
+    bdg dom eval 'document.querySelector("[name=firstName]").value.length'
+    ```
+
+    **Expected output:**
+    ```json
+    {
+      "result": {
+        "type": "number",
+        "value": 50
+      }
+    }
+    ```
+
+    The browser enforced the maxlength attribute by truncating at 50 characters.
+  </Step>
+
+  <Step title="Test with valid inputs">
+    Fill all fields with valid data and verify the form accepts submission.
+
+    ```bash
+    # Fill all required fields with valid data
+    bdg dom fill 0 "John Doe"
+    bdg dom fill 1 "john.doe@example.com"
+    bdg dom fill 2 "25"
+    bdg dom fill 3 "SecurePass123!"
+    bdg dom click 4   # Accept terms checkbox
+
+    # Verify form state shows ready to submit
+    bdg dom form --json | jq '.data.forms[0].summary.readyToSubmit'
+
+    # Submit form
+    bdg dom click 5
+
+    # Check for success message or navigation
+    bdg peek --console
+    bdg dom query ".success-message"
+    ```
+
+    **Expected output:**
+    ```json
+    true
+    ```
+  </Step>
+
+  <Step title="Test edge cases">
+    Test special characters, unicode, and boundary values.
+
+    ```bash
+    # Test special characters in text fields
+    bdg dom fill 0 "O'Brien"                    # Apostrophe
+    bdg dom fill 0 "José García"                # Accented characters
+    bdg dom fill 0 "<script>alert('xss')</script>"  # XSS attempt
+
+    # Test email edge cases
+    bdg dom fill 1 "user+tag@example.com"       # Plus addressing
+    bdg dom fill 1 "user@subdomain.example.com"  # Subdomain
+    bdg dom fill 1 "user@localhost"             # Localhost (often invalid)
+
+    # Test numeric boundaries
+    bdg dom fill 2 "0"      # Minimum
+    bdg dom fill 2 "150"    # Maximum (if age field)
+    bdg dom fill 2 "18"     # Common threshold
+
+    # After each, check validation
+    bdg dom eval 'document.querySelector("[name=firstName]").validity.valid'
+    ```
+  </Step>
+
+  <Step title="Monitor network requests during submission">
+    Watch for AJAX validation or form submission requests.
+
+    ```bash
+    # Submit form and watch network
+    bdg dom click 5
+
+    # Check for POST requests
+    bdg network list --filter "method:POST" --last 5
+
+    # Inspect response
+    bdg network list --json | jq '.data.requests[] | select(.method == "POST") | {url, status, responseBody}'
+    ```
+
+    **Expected output:**
+    ```json
+    {
+      "url": "https://testpages.eviltester.com/api/submit",
+      "status": 200,
+      "responseBody": {"success": true, "message": "Form submitted"}
+    }
+    ```
+  </Step>
+
+  <Step title="Generate test report">
+    Stop the session and export all validation test data.
+
+    ```bash
+    bdg stop
+
+    # Export network activity
+    bdg network har form-validation-test.har
+
+    # Extract console errors (validation failures)
+    cat ~/.bdg/session.json | jq '.data.console[] | select(.type == "error")'
+
+    # Count validation attempts
+    cat ~/.bdg/session.json | jq '[.data.network[] | select(.method == "POST")] | length'
+    ```
+  </Step>
+</Steps>
+
+## Validation Test Matrix
+
+Use this systematic approach to test all validation rules:
+
+| Field Type | Valid Input | Invalid Input | Boundary Case |
+|------------|-------------|---------------|---------------|
+| **Email** | `user@example.com` | `not-an-email` | `user+tag@sub.example.co.uk` |
+| **Number** | `25` | `abc` | `0`, `999`, `-1` |
+| **Text (required)** | `John Doe` | `` (empty) | Single char: `A` |
+| **Password** | `SecurePass123!` | `123` | Min length boundary |
+| **Checkbox** | `checked` | `unchecked` | Toggle multiple times |
+
+## Common Validation Bugs
+
+<AccordionGroup>
+  <Accordion title="Client-side validation bypassed">
+    **Symptom:** Form submits even with invalid data.
+
+    **Test:**
+    ```bash
+    # Disable HTML5 validation and try to submit
+    bdg dom eval 'document.querySelector("form").setAttribute("novalidate", "true")'
+    bdg dom click 5
+    bdg network list --filter "method:POST"
+    ```
+
+    If the POST request succeeds with invalid data, server-side validation is missing.
+  </Accordion>
+
+  <Accordion title="Validation messages not accessible">
+    **Symptom:** Error messages visible but not announced to screen readers.
+
+    **Test:**
+    ```bash
+    # Check for aria-describedby linking error messages
+    bdg dom query "[aria-invalid='true']" --json | jq '.data.nodes[] | .attributes["aria-describedby"]'
+
+    # Verify error messages have role="alert"
+    bdg dom query ".error-message" --json | jq '.data.nodes[] | .attributes.role'
+    ```
+  </Accordion>
+
+  <Accordion title="Inconsistent validation triggers">
+    **Symptom:** Validation only runs on submit, not on blur.
+
+    **Test:**
+    ```bash
+    # Fill field with invalid data and tab away
+    bdg dom fill 1 "invalid-email"
+    bdg dom pressKey 1 Tab
+
+    # Check if error message appeared
+    bdg dom query "#email-error"
+    ```
+
+    Best practice: Validate on blur for immediate feedback.
+  </Accordion>
+
+  <Accordion title="XSS vulnerabilities in error messages">
+    **Symptom:** User input reflected in error messages without sanitization.
+
+    **Test:**
+    ```bash
+    bdg dom fill 0 "<img src=x onerror='alert(1)'>"
+    bdg dom click 5
+
+    # Check if script tags are in DOM
+    bdg dom query "script" --json | jq '.data.nodes | length'
+
+    # Check error message rendering
+    bdg dom get ".error-message" --raw
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Automation Script Example
+
+Create a shell script to test all validation cases:
+
+```bash
+#!/bin/bash
+# form-validation-test.sh
+
+URL="https://testpages.eviltester.com/styled/validation/input-validation.html"
+RESULTS="validation-results.json"
+
+echo "Starting form validation test..."
+bdg $URL
+
+echo "Testing email validation..."
+for email in "valid@example.com" "invalid" "missing@" "@no-user.com"; do
+  bdg dom fill 1 "$email"
+  bdg dom click 5
+  
+  # Capture validation result
+  VALID=$(bdg dom eval 'document.querySelector("[name=email]").validity.valid' --json | jq -r '.data.result.value')
+  
+  echo "Email: $email -> Valid: $VALID"
+done
+
+echo "Testing age field..."
+for age in "25" "-5" "999" "abc"; do
+  bdg dom fill 2 "$age"
+  VALID=$(bdg dom eval 'document.querySelector("[name=age]").validity.valid' --json | jq -r '.data.result.value')
+  echo "Age: $age -> Valid: $VALID"
+done
+
+bdg stop
+echo "Test complete. Results in $RESULTS"
+```
+
+## Tips
+
+### Use form discovery to get field indices
+
+```bash
+bdg dom form --json | jq '.data.forms[0].fields[] | {index, label, type}'
+```
+
+### Check validation state programmatically
+
+```bash
+bdg dom eval 'Array.from(document.querySelectorAll("input")).map(el => ({name: el.name, valid: el.validity.valid, message: el.validationMessage}))' --json
+```
+
+### Export failed validation attempts
+
+```bash
+bdg console --json | jq '[.data.messages[] | select(.type == "error" and (.text | contains("validation")))]'
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Form Discovery" icon="magnifying-glass" href="/guides/forms-and-interaction">
+    Learn about the `bdg dom form` command
+  </Card>
+  <Card title="DOM Interaction" icon="hand-pointer" href="/guides/forms-and-interaction">
+    Master fill, click, and submit commands
+  </Card>
+  <Card title="Accessibility Testing" icon="universal-access" href="/commands/dom/a11y">
+    Check form accessibility with a11y commands
+  </Card>
+  <Card title="Debugging SPAs" icon="bug" href="/recipes/debugging-spa">
+    Debug dynamic form validation in SPAs
+  </Card>
+</CardGroup>

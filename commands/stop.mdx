@@ -1,0 +1,321 @@
+---
+title: 'bdg stop'
+description: 'Stop daemon and write collected telemetry to session.json'
+---
+
+## Overview
+
+The `stop` command terminates the active session, captures a final DOM snapshot, and writes all collected telemetry (DOM, network, console) to `~/.bdg/session.json`.
+
+## Syntax
+
+```bash
+bdg stop [options]
+```
+
+## Options
+
+<ParamField path="--kill-chrome" type="boolean" default="false">
+  Also kill the Chrome browser process after stopping the session
+  
+  ```bash
+  bdg stop --kill-chrome
+  ```
+</ParamField>
+
+<ParamField path="--json" type="boolean" default="false">
+  Output as JSON for programmatic use
+  
+  ```bash
+  bdg stop --json
+  ```
+</ParamField>
+
+## Examples
+
+### Basic Stop
+
+```bash
+bdg stop
+```
+
+**Output:**
+
+```
+Session stopped. Output saved to: /Users/username/.bdg/session.json
+```
+
+### Stop and Kill Chrome
+
+```bash
+bdg stop --kill-chrome
+```
+
+**Output:**
+
+```
+Session stopped. Output saved to: /Users/username/.bdg/session.json
+Killed Chrome (PID 12346)
+```
+
+### JSON Output
+
+```bash
+bdg stop --json
+```
+
+**Output:**
+
+```json
+{
+  "version": "0.5.1",
+  "success": true,
+  "data": {
+    "stopped": {
+      "bdg": true,
+      "chrome": false,
+      "daemons": false
+    },
+    "message": "Session stopped successfully"
+  }
+}
+```
+
+### Stop with Chrome Killed (JSON)
+
+```bash
+bdg stop --kill-chrome --json
+```
+
+**Output:**
+
+```json
+{
+  "version": "0.5.1",
+  "success": true,
+  "data": {
+    "stopped": {
+      "bdg": true,
+      "chrome": true,
+      "daemons": false
+    },
+    "message": "Session stopped successfully"
+  }
+}
+```
+
+## What Gets Cleaned Up
+
+When you run `bdg stop`, the following actions occur:
+
+1. **DOM Capture**: Takes a final snapshot of the DOM and accessibility tree
+2. **Data Write**: Writes all collected telemetry to `~/.bdg/session.json`
+3. **Daemon Stop**: Terminates the bdg daemon process
+4. **File Cleanup**: Removes session files:
+   - `daemon.pid`
+   - `daemon.sock`
+   - `session.meta.json`
+5. **Chrome** (if `--kill-chrome`): Terminates the Chrome browser process
+
+<Note>
+Chrome continues running by default after stop. Use `--kill-chrome` or run `bdg cleanup --aggressive` to terminate Chrome.
+</Note>
+
+## Session Output File
+
+The final output is written to `~/.bdg/session.json` with the following structure:
+
+```json
+{
+  "version": "0.5.1",
+  "success": true,
+  "timestamp": "2025-03-05T10:35:00.000Z",
+  "duration": 300000,
+  "target": {
+    "url": "https://example.com",
+    "title": "Example Domain"
+  },
+  "data": {
+    "network": [
+      {
+        "requestId": "ABC123",
+        "url": "https://example.com",
+        "method": "GET",
+        "status": 200,
+        "mimeType": "text/html",
+        "requestHeaders": { ... },
+        "responseHeaders": { ... },
+        "responseBody": "...",
+        "timing": { ... }
+      }
+    ],
+    "console": [
+      {
+        "type": "log",
+        "timestamp": 1234567890,
+        "args": ["User logged in"],
+        "source": "console-api",
+        "level": "info",
+        "url": "https://example.com/app.js",
+        "lineNumber": 42
+      }
+    ],
+    "dom": {
+      "nodeId": 1,
+      "nodeName": "HTML",
+      "children": [ ... ]
+    }
+  }
+}
+```
+
+<Tip>
+Use `--compact` flag on `bdg start` to reduce file size by ~30% (removes JSON indentation).
+</Tip>
+
+## Use Cases
+
+### Save and Copy Output
+
+```bash
+# Stop session and save to custom location
+bdg stop
+cp ~/.bdg/session.json ./results/$(date +%Y%m%d-%H%M%S).json
+```
+
+### Automated Testing
+
+```bash
+# Run test and verify results
+bdg example.com --quiet
+# ... perform test actions ...
+bdg stop --json > /dev/null
+
+# Analyze results
+jq '.data.network[] | select(.status >= 400)' ~/.bdg/session.json
+```
+
+### Multiple Sessions
+
+```bash
+# Save each session separately
+for url in site1.com site2.com site3.com; do
+  bdg $url --quiet
+  sleep 5  # Wait for page load
+  bdg stop
+  cp ~/.bdg/session.json ./results/${url}.json
+done
+```
+
+### CI/CD Integration
+
+```bash
+# Capture session in CI pipeline
+bdg https://staging.example.com --headless --timeout 60
+bdg stop --kill-chrome
+
+# Upload artifact
+aws s3 cp ~/.bdg/session.json s3://test-results/session-$BUILD_ID.json
+```
+
+## Error Handling
+
+### No Active Session
+
+```bash
+bdg stop
+```
+
+**Output:**
+
+```
+Error: No active session found
+Suggestion: Start a session first with: bdg <url>
+```
+
+**Exit Code:** 83 (RESOURCE_NOT_FOUND)
+
+### Daemon Not Running
+
+```bash
+bdg stop
+```
+
+**Output:**
+
+```
+Error: Daemon not running
+Suggestion: Start a session first with: bdg <url>
+```
+
+**Exit Code:** 83 (RESOURCE_NOT_FOUND)
+
+### Session File Write Error
+
+If the session directory is not writable:
+
+```bash
+bdg stop
+```
+
+**Output:**
+
+```
+Error: Failed to write session output
+Suggestion: Try: bdg cleanup --force to reset session state
+```
+
+**Exit Code:** 110 (SOFTWARE_ERROR)
+
+## Exit Codes
+
+<ResponseField name="0" type="SUCCESS">
+  Session stopped successfully and data written to disk
+</ResponseField>
+
+<ResponseField name="83" type="RESOURCE_NOT_FOUND">
+  No active session found or daemon not running
+</ResponseField>
+
+<ResponseField name="110" type="SOFTWARE_ERROR">
+  Error stopping session or writing output file
+</ResponseField>
+
+## Related Commands
+
+<CardGroup cols={2}>
+  <Card title="bdg start" icon="play" href="/commands/start">
+    Start a new browser session
+  </Card>
+  <Card title="bdg status" icon="chart-line" href="/commands/status">
+    Check session status before stopping
+  </Card>
+  <Card title="bdg cleanup" icon="broom" href="/commands/cleanup">
+    Clean up stale session files
+  </Card>
+  <Card title="bdg peek" icon="eye" href="/commands/peek">
+    Preview data before stopping
+  </Card>
+</CardGroup>
+
+## Tips
+
+<Tip>
+**Preview Before Stopping**: Use `bdg peek` to preview collected data before stopping. This helps verify you've captured what you need.
+</Tip>
+
+<Tip>
+**Chrome Stays Running**: By default, Chrome continues running after stop. This allows you to manually inspect the browser state. Use `--kill-chrome` to terminate Chrome automatically.
+</Tip>
+
+<Tip>
+**Automated Workflows**: In scripts, always use `bdg stop --json` to suppress verbose output and capture structured results.
+</Tip>
+
+<Warning>
+**Data Loss**: Session data is only written to disk on stop. If the daemon crashes, data is lost. Use `bdg peek` during the session to preview data.
+</Warning>
+
+<Warning>
+**DOM Snapshot Timing**: The DOM snapshot is captured at the moment you run `stop`. Ensure the page is in the desired state before stopping.
+</Warning>

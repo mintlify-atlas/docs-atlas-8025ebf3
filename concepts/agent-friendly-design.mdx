@@ -1,0 +1,502 @@
+---
+title: Agent-Friendly Design
+description: How Browser Debugger CLI is optimized for AI agent automation
+---
+
+## Philosophy
+
+Browser Debugger CLI is designed as an **agent-first tool** where information density and predictability take precedence over human ergonomics. Every design decision asks: **"Does this help an agent make decisions?"**
+
+## Core Principles
+
+These principles are extracted from `docs/principles/AGENT_FRIENDLY_TOOLS.md` and implemented throughout the codebase.
+
+## 1. Self-Documenting Tools
+
+**Agents don't read documentation - they query capabilities.**
+
+### Introspection Commands
+
+All capabilities are discoverable programmatically (`CLAUDE.md:10`):
+
+```bash
+# Get all commands, flags, and exit codes
+bdg --help --json
+
+# List all CDP domains (53 total)
+bdg cdp --list
+
+# List methods in a domain
+bdg cdp Network --list
+
+# Get full method schema
+bdg cdp Network.getCookies --describe
+
+# Search for methods by keyword
+bdg cdp --search cookie
+```
+
+### Help as Structured Data
+
+```bash
+$ bdg --help --json
+{
+  "version": "1.2.0",
+  "commands": {
+    "network": {
+      "description": "Network request inspection",
+      "subcommands": ["list", "failed", "timing"],
+      "flags": {
+        "--json": "Output in JSON format",
+        "--limit": "Maximum number of results (default: 50)"
+      }
+    }
+  },
+  "exitCodes": {
+    "0": "success",
+    "83": "resource_not_found",
+    "102": "cdp_timeout"
+  }
+}
+```
+
+**Implementation**: `src/commands/shared/CommandRunner.ts:24`
+
+## 2. Semantic Exit Codes
+
+**Exit codes communicate actionable information, not just success/failure.**
+
+### Exit Code Ranges
+
+Based on Square's semantic exit code system (`docs/principles/AGENT_FRIENDLY_TOOLS.md:66`):
+
+```
+0        Success
+1        Generic failure (backward compatibility)
+80-99    User errors (invalid arguments, resources, permissions)
+100-119  Software errors (bugs, timeouts, integration failures)
+```
+
+### Specific Exit Codes
+
+From `src/utils/exitCodes.ts:35`:
+
+| Code | Name | Meaning | Agent Action |
+|------|------|---------|-------------|
+| `0` | SUCCESS | Operation completed | Proceed to next step |
+| `81` | INVALID_ARGUMENTS | Bad input/flags | Fix arguments, don't retry |
+| `83` | RESOURCE_NOT_FOUND | Resource missing | Verify resource exists |
+| `87` | STALE_CACHE | Cache invalidated | Re-run query to refresh |
+| `102` | CDP_TIMEOUT | Browser unresponsive | Retry with backoff |
+| `110` | SOFTWARE_ERROR | Internal bug | Report bug, don't retry |
+
+### Agent Decision Logic
+
+```typescript
+const exitCode = process.exitCode;
+
+if (exitCode === 0) {
+  // Success - proceed
+} else if (exitCode >= 80 && exitCode <= 89) {
+  // Invalid input - fix arguments, don't retry
+} else if (exitCode >= 90 && exitCode <= 99) {
+  // Resource issue - verify resource exists
+} else if (exitCode >= 100 && exitCode <= 109) {
+  // Integration error - retry with backoff
+} else if (exitCode >= 110 && exitCode <= 119) {
+  // Software bug - report, don't retry
+}
+```
+
+**Stability guarantee** (`src/utils/exitCodes.ts:4`):
+
+> Exit codes are part of bdg's stable public API. Values will not change in minor versions.
+
+## 3. Structured JSON Output
+
+**All commands support `--json` for machine-readable output.**
+
+### JSON Output Envelope
+
+Consistent response structure across all commands (`CLAUDE.md:90`):
+
+```typescript
+// Success
+{
+  "version": "1.2.0",
+  "success": true,
+  "data": { /* command-specific data */ }
+}
+
+// Error
+{
+  "version": "1.2.0",
+  "success": false,
+  "error": "Resource not found",
+  "exitCode": 83,
+  "suggestion": "Start a session with: bdg <url>"
+}
+```
+
+### Real Example
+
+```bash
+$ bdg network list --json
+{
+  "version": "1.2.0",
+  "success": true,
+  "data": {
+    "requests": [
+      {
+        "id": "req_001",
+        "url": "https://api.example.com/data",
+        "method": "GET",
+        "status": 200,
+        "duration": 145
+      }
+    ],
+    "summary": {
+      "total": 47,
+      "failed": 3,
+      "avgDuration": 234
+    }
+  }
+}
+```
+
+**Implementation**: `src/commands/shared/CommandRunner.ts:24`
+
+## 4. Structured Error Messages
+
+**Errors include recovery suggestions.**
+
+### Error Structure
+
+```typescript
+interface CommandError {
+  error: string;           // Human-readable message
+  exitCode: number;        // Semantic exit code
+  suggestion?: string;     // What to do next
+  type?: string;           // Machine-readable error type
+  recoverable?: boolean;   // Should agent retry?
+}
+```
+
+### Real Examples
+
+**Resource not found** (`CLAUDE.md:44`):
+
+```typescript
+throw new CommandError(
+  'Session not found',
+  { suggestion: 'Start a session with: bdg <url>' },
+  EXIT_CODES.RESOURCE_NOT_FOUND  // 83
+);
+```
+
+**Stale cache** (`CLAUDE.md:110`):
+
+```typescript
+throw new CommandError(
+  `Element at index ${index} not accessible`,
+  { suggestion: 'Re-run query to refresh cache' },
+  EXIT_CODES.STALE_CACHE  // 87
+);
+```
+
+**Typo detection** (`CLAUDE.md:126`):
+
+```typescript
+if (!VALID_PRESETS.includes(preset)) {
+  const suggestions = findSimilar(preset, VALID_PRESETS);
+  throw new CommandError(
+    `Unknown preset: "${preset}"`,
+    { 
+      suggestion: suggestions.length 
+        ? `Did you mean: ${suggestions[0]}?` 
+        : `Available: ${VALID_PRESETS.join(', ')}` 
+    },
+    EXIT_CODES.INVALID_ARGUMENTS  // 81
+  );
+}
+```
+
+## 5. Predictable Output Format
+
+**Same input always produces same output structure.**
+
+### Versioned Schemas
+
+All JSON output includes version number for schema tracking:
+
+```json
+{
+  "version": "1.2.0",
+  "data": { /* ... */ }
+}
+```
+
+### Additive Changes Only
+
+From `docs/principles/AGENT_FRIENDLY_TOOLS.md:50`:
+
+- ✅ **Adding new fields**: Safe (minor version bump)
+- ✅ **Adding new commands**: Safe (minor version bump)
+- ❌ **Removing fields**: Breaking change (major version bump)
+- ❌ **Changing field types**: Breaking change (major version bump)
+
+### Stream Separation
+
+**Primary data** → `stdout` (parseable):
+```bash
+$ bdg network list --json > requests.json
+```
+
+**Logs/warnings** → `stderr` (ignorable):
+```bash
+$ bdg network list 2>/dev/null  # Ignore warnings
+```
+
+**Implementation**: All commands use `console.error()` for logs and `stdout` for data.
+
+## 6. Context Without Verbosity
+
+**Structured information, not chatty narration.**
+
+### Bad Example (Verbose)
+
+```
+Connecting to Chrome DevTools Protocol...
+Successfully established connection on port 9222
+Querying network activity...
+Found 47 requests in the last 30 seconds
+Filtering for failed requests...
+3 requests failed with status codes >= 400
+Here are the results:
+```
+
+### Good Example (Structured)
+
+```
+Connected: localhost:9222
+Total Requests: 47
+Failed: 3/47
+Time Range: 30s
+
+req_001 | POST /api/data | 500 | 145ms
+req_015 | GET /config.json | 404 | 23ms
+req_042 | PUT /update | 503 | 2341ms
+```
+
+### Best Example (JSON)
+
+```json
+{
+  "connection": "localhost:9222",
+  "summary": {
+    "total_requests": 47,
+    "failed_requests": 3,
+    "time_range_seconds": 30
+  },
+  "requests": [
+    {"id": "req_001", "method": "POST", "url": "/api/data", "status": 500}
+  ]
+}
+```
+
+## 7. Zero-Based Indexing
+
+**All indices are 0-based everywhere for consistency.**
+
+From `CLAUDE.md:140`:
+
+```bash
+# Query returns indexed results
+$ bdg dom query "a"
+[0] <a href="/introduction">Home</a>
+[1] <a href="/introduction">About</a>
+[2] <a href="https://github.com/szymdzum/browser-debugger-cli/discussions">Contact</a>
+
+# Access by index
+$ bdg dom get 0   # First element
+$ bdg dom get 1   # Second element
+```
+
+**Implementation**: `src/commands/dom/query.ts`, `src/commands/dom/get.ts`
+
+## 8. Composable Commands
+
+**Each command does one thing and composes via pipes.**
+
+### Unix Pipeline Patterns
+
+```bash
+# Find slow requests, extract URLs
+bdg network list --json | \
+  jq '.data.requests[] | select(.duration > 1000) | .url'
+
+# Count error logs
+bdg console --json | \
+  jq '.data.messages[] | select(.level=="error")' | \
+  wc -l
+
+# Get all link hrefs
+bdg dom query "a" --json | \
+  jq -r '.data.elements[].attributes.href'
+```
+
+### Command Independence
+
+From `docs/principles/AGENT_FRIENDLY_TOOLS.md:281`:
+
+- ✅ **One responsibility**: Each command answers one specific question
+- ✅ **Stable output**: Line-based or JSON format
+- ✅ **Clean stdout**: No progress bars or decorations
+- ✅ **Composable**: Output feeds into next command
+
+## 9. Non-Interactive Execution
+
+**No prompts or interactive flows.**
+
+All commands work without stdin:
+
+```bash
+# No confirmation prompts
+bdg cleanup --force
+
+# No interactive mode
+bdg dom fill "input" "value"
+
+# Works in CI/CD
+bdg https://example.com && bdg network list --json
+```
+
+## 10. Case-Insensitive Input
+
+**Flexible input parsing reduces errors.**
+
+CDP methods are case-insensitive (`src/commands/cdp.ts:105`):
+
+```bash
+# All equivalent:
+bdg cdp Network.getCookies
+bdg cdp network.getcookies
+bdg cdp NETWORK.GETCOOKIES
+```
+
+## Real-World Usage Examples
+
+### Example 1: Check for Console Errors
+
+```bash
+#!/bin/bash
+bdg https://example.com
+sleep 5
+
+errors=$(bdg console --json | jq '[.data.messages[] | select(.level=="error")] | length')
+
+if [ "$errors" -gt 0 ]; then
+  echo "Found $errors console errors"
+  bdg stop
+  exit 1
+fi
+
+bdg stop
+```
+
+### Example 2: Monitor Network Failures
+
+```bash
+#!/bin/bash
+bdg https://api.example.com
+sleep 10
+
+failed=$(bdg network list --json | jq '[.data.requests[] | select(.status >= 400)] | length')
+
+if [ "$failed" -gt 0 ]; then
+  echo "Found $failed failed requests"
+  bdg network list --json | jq '.data.requests[] | select(.status >= 400)'
+  bdg stop
+  exit 1
+fi
+
+bdg stop
+```
+
+### Example 3: Extract All Links
+
+```bash
+#!/bin/bash
+bdg https://example.com
+sleep 3
+
+bdg dom query "a[href]" --json | \
+  jq -r '.data.elements[].attributes.href' | \
+  sort -u > links.txt
+
+bdg stop
+echo "Extracted $(wc -l < links.txt) unique links"
+```
+
+## Design Checklist
+
+From `docs/principles/AGENT_FRIENDLY_TOOLS.md:476`:
+
+### ✅ Command Design
+- [x] Each command answers one specific question
+- [x] Subcommands reflect logical navigation path
+- [x] Command names are verbs or nouns, never sentences
+- [x] All commands support `--json` flag
+- [x] All commands support non-interactive execution
+
+### ✅ Output Design
+- [x] Primary data goes to stdout
+- [x] Logs/progress go to stderr
+- [x] Default output is human-readable AND line-parseable
+- [x] JSON output has stable schema with version number
+- [x] No ANSI colors when stdout is not a TTY
+
+### ✅ Error Handling
+- [x] Exit codes follow semantic ranges (0, 80-99, 100-119)
+- [x] Errors include `type`, `code`, `suggestion`
+- [x] Error messages on stderr
+- [x] JSON errors when `--json` flag used
+- [x] No retry logic (let agents decide)
+
+### ✅ Composability
+- [x] Commands can be piped together
+- [x] Output can be filtered with grep/awk/jq
+- [x] Each command has single responsibility
+
+## References
+
+These design principles are based on:
+
+1. **InfoQ Article**: "Keep the Terminal Relevant: Patterns for AI Agent Driven CLIs" (August 2025)
+   - Machine-friendly escape hatches
+   - Output as API contracts
+
+2. **Square Engineering**: "Command Line Observability with Semantic Exit Codes" (January 2023)
+   - Exit code ranges: 80-99 user errors, 100-119 software errors
+
+3. **Command Line Interface Guidelines** (clig.dev)
+   - Unix philosophy application
+   - Output separation (stdout/stderr)
+
+4. **Unix Philosophy** (Bell Labs, 1978)
+   - Do one thing well
+   - Composability through pipes
+
+<Tip>
+**Key principle**: Design for deterministic, composable operations with structured output. This serves both agents (who need parseable data) and humans (who benefit from predictability).
+</Tip>
+
+<Note>
+**Version stability**: Exit codes and JSON schemas are part of bdg's stable API. Changes follow semantic versioning.
+</Note>
+
+## Related Topics
+
+- [Sessions](/concepts/sessions) - Daemon architecture and lifecycle
+- [CDP Access](/concepts/cdp-access) - Self-documenting CDP introspection
+- [CLI Reference](/commands/start) - Complete command documentation

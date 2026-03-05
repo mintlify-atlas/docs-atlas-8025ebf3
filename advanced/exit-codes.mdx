@@ -1,0 +1,505 @@
+---
+title: Exit Codes
+description: Complete reference for bdg's semantic exit code system
+---
+
+## Overview
+
+Browser Debugger CLI uses **semantic exit codes** to enable reliable automation and agent-friendly error handling. Exit codes follow predictable ranges that indicate the category and severity of errors.
+
+<Note>
+  Exit codes are **stable API** - values will not change in minor versions. Safe to use in automation scripts and CI/CD pipelines.
+</Note>
+
+## Exit Code Ranges
+
+| Range | Category | Meaning | Retry Strategy |
+|-------|----------|---------|----------------|
+| `0` | Success | Command completed successfully | - |
+| `1` | Generic Failure | Legacy/backward compatibility | Avoid in new code |
+| `80-99` | **User Errors** | Invalid input, permissions, missing resources | Fix input and retry |
+| `100-119` | **Software Errors** | Bugs, timeouts, integration failures | Investigate or report |
+
+## Philosophy
+
+### User Errors (80-99)
+
+Problems caused by incorrect usage, invalid input, or environmental constraints. **The user can fix these** by adjusting their command or environment.
+
+**Examples**:
+- Invalid URL format
+- File not found
+- Insufficient permissions
+- Resource already exists
+
+**Action**: Provide clear error message with suggestion for fix.
+
+### Software Errors (100-119)
+
+Problems caused by bugs, external service failures, or unexpected conditions. **Requires investigation** by developers or may resolve with retry.
+
+**Examples**:
+- Chrome launch failure
+- CDP connection timeout
+- Unhandled exception
+- Session file corruption
+
+**Action**: Include diagnostics and suggest reporting the issue.
+
+## Complete Reference
+
+### Success
+
+<ParamField path="0" type="SUCCESS">
+  Operation completed successfully
+
+  **Example**:
+  ```bash
+  bdg localhost:3000
+  echo $?  # 0
+  ```
+</ParamField>
+
+### Generic Failure
+
+<ParamField path="1" type="GENERIC_FAILURE">
+  Generic failure (backward compatibility)
+
+  **Note**: Use specific codes (80-119) in new code. This exists for backward compatibility.
+
+  **Example**:
+  ```bash
+  bdg some-invalid-command
+  echo $?  # 1
+  ```
+</ParamField>
+
+### User Errors (80-99)
+
+<ParamField path="80" type="INVALID_URL">
+  Invalid URL format or unreachable URL
+
+  **Example**:
+  ```bash
+  bdg not-a-valid-url
+  # Error: Invalid URL: not-a-valid-url
+  # Suggestion: Use format: http://localhost:3000 or localhost:3000
+  echo $?  # 80
+  ```
+</ParamField>
+
+<ParamField path="81" type="INVALID_ARGUMENTS">
+  Invalid command-line arguments or options
+
+  **Example**:
+  ```bash
+  bdg dom query --invalid-flag
+  # Error: Unknown option: --invalid-flag
+  echo $?  # 81
+  ```
+
+  **Common Cases**:
+  - Unknown flags
+  - Invalid flag values
+  - Missing required arguments
+  - Type mismatches (e.g., string where number expected)
+</ParamField>
+
+<ParamField path="82" type="PERMISSION_DENIED">
+  Insufficient permissions for operation
+
+  **Example**:
+  ```bash
+  bdg localhost:3000  # When ~/.bdg/ is not writable
+  # Error: Permission denied: Cannot write to ~/.bdg/session.json
+  echo $?  # 82
+  ```
+</ParamField>
+
+<ParamField path="83" type="RESOURCE_NOT_FOUND">
+  Requested resource not found (session, file, element, etc.)
+
+  **Example**:
+  ```bash
+  bdg status  # When no session is running
+  # Error: No active session found
+  # Suggestion: Start a session with: bdg <url>
+  echo $?  # 83
+  ```
+
+  **Common Cases**:
+  - No active session
+  - Element not found (DOM query)
+  - Network request ID not found
+  - File does not exist
+</ParamField>
+
+<ParamField path="84" type="RESOURCE_ALREADY_EXISTS">
+  Resource already exists (duplicate session, etc.)
+
+  **Example**:
+  ```bash
+  bdg localhost:3000  # When session is already running
+  # Error: Session already running (PID: 12345)
+  # Suggestion: Stop current session with: bdg stop
+  echo $?  # 84
+  ```
+</ParamField>
+
+<ParamField path="85" type="RESOURCE_BUSY">
+  Resource is locked or busy
+
+  **Example**:
+  ```bash
+  bdg cleanup  # When session is still active
+  # Error: Session still active (PID: 12345)
+  # Suggestion: Stop gracefully: bdg stop
+  #            Force cleanup: bdg cleanup --force
+  echo $?  # 85
+  ```
+</ParamField>
+
+<ParamField path="86" type="DAEMON_ALREADY_RUNNING">
+  Daemon is already running
+
+  **Example**:
+  ```bash
+  # Internal check - prevents duplicate daemons
+  echo $?  # 86
+  ```
+
+  **Note**: Rarely seen by users - handled internally during daemon startup.
+</ParamField>
+
+<ParamField path="87" type="STALE_CACHE">
+  Cache invalidated by navigation or DOM changes
+
+  **Example**:
+  ```bash
+  bdg dom query "button"  # Returns indices [0], [1], [2]
+  # Page navigates or DOM changes
+  bdg dom click 0  # Element at index 0 no longer valid
+  # Error: Element at index 0 not accessible
+  # Suggestion: Re-run query to refresh cache
+  echo $?  # 87
+  ```
+
+  **Important**: This is distinct from `RESOURCE_NOT_FOUND` (83) - it indicates the element *existed* but is now stale due to DOM changes.
+</ParamField>
+
+<ParamField path="88" type="NO_FORMS_FOUND">
+  No forms discovered on the page
+
+  **Example**:
+  ```bash
+  bdg dom form
+  # Error: No forms found on current page
+  # Suggestion: Verify page has loaded completely
+  echo $?  # 88
+  ```
+</ParamField>
+
+<ParamField path="89" type="FORM_IN_IFRAME">
+  Form is inside an iframe (cross-origin or same-origin)
+
+  **Example**:
+  ```bash
+  bdg dom form
+  # Error: Form detected in iframe - bdg cannot access iframe content
+  # Suggestion: Navigate directly to iframe URL if accessible
+  echo $?  # 89
+  ```
+</ParamField>
+
+### Software Errors (100-119)
+
+<ParamField path="100" type="CHROME_LAUNCH_FAILURE">
+  Chrome browser failed to launch
+
+  **Example**:
+  ```bash
+  bdg localhost:3000
+  # Error: Chrome failed to launch
+  # Chrome not found in standard locations
+  # Tried: /usr/bin/google-chrome, /usr/bin/chromium, ...
+  echo $?  # 100
+  ```
+
+  **Common Causes**:
+  - Chrome not installed
+  - Port conflict (9222 already in use)
+  - Missing dependencies (Linux)
+  - Insufficient resources
+</ParamField>
+
+<ParamField path="101" type="CDP_CONNECTION_FAILURE">
+  Failed to connect to Chrome DevTools Protocol
+
+  **Example**:
+  ```bash
+  bdg localhost:3000
+  # Error: Failed to connect to CDP WebSocket
+  # Connection refused: ws://localhost:9222/devtools/page/...
+  echo $?  # 101
+  ```
+
+  **Common Causes**:
+  - Chrome crashed after launch
+  - WebSocket endpoint unreachable
+  - Network/firewall issues
+</ParamField>
+
+<ParamField path="102" type="CDP_TIMEOUT">
+  CDP operation timed out
+
+  **Example**:
+  ```bash
+  bdg dom eval "while(true) {}"
+  # Error: CDP operation timed out (10s)
+  echo $?  # 102
+  ```
+
+  **Common Causes**:
+  - Page unresponsive
+  - Infinite loop in JavaScript
+  - Network latency
+  - Heavy computation blocking event loop
+</ParamField>
+
+<ParamField path="103" type="SESSION_FILE_ERROR">
+  Session file read/write error
+
+  **Example**:
+  ```bash
+  bdg stop
+  # Error: Failed to write session.json
+  # ENOSPC: no space left on device
+  echo $?  # 103
+  ```
+
+  **Common Causes**:
+  - Disk full
+  - File system corruption
+  - Permission changes during session
+</ParamField>
+
+<ParamField path="104" type="UNHANDLED_EXCEPTION">
+  Unhandled exception in code
+
+  **Example**:
+  ```bash
+  bdg some-command
+  # Error: Unhandled exception: TypeError: Cannot read property 'x' of undefined
+  echo $?  # 104
+  ```
+
+  **Note**: This indicates a bug. Please report with full error message.
+</ParamField>
+
+<ParamField path="105" type="SIGNAL_HANDLER_ERROR">
+  Signal handler error
+
+  **Example**:
+  ```bash
+  # Internal error during SIGTERM/SIGINT handling
+  echo $?  # 105
+  ```
+
+  **Note**: Rare - indicates cleanup failure during shutdown.
+</ParamField>
+
+<ParamField path="110" type="SOFTWARE_ERROR">
+  Generic software error (use specific codes when possible)
+
+  **Example**:
+  ```bash
+  bdg some-command
+  # Error: Unexpected internal error
+  echo $?  # 110
+  ```
+
+  **Note**: Use more specific codes (100-109) when possible.
+</ParamField>
+
+## Usage in Automation
+
+### Shell Scripts
+
+```bash
+#!/bin/bash
+set -e  # Exit on error
+
+bdg localhost:3000
+START_CODE=$?
+
+if [ $START_CODE -eq 0 ]; then
+  echo "Session started successfully"
+elif [ $START_CODE -ge 80 ] && [ $START_CODE -le 99 ]; then
+  echo "User error - check your input"
+  exit 1
+elif [ $START_CODE -ge 100 ] && [ $START_CODE -le 119 ]; then
+  echo "Software error - may need investigation"
+  exit 2
+else
+  echo "Unexpected exit code: $START_CODE"
+  exit 3
+fi
+```
+
+### Python
+
+```python
+import subprocess
+import sys
+
+result = subprocess.run(['bdg', 'localhost:3000'])
+
+if result.returncode == 0:
+    print("Success")
+elif 80 <= result.returncode <= 99:
+    print("User error - check input")
+    sys.exit(1)
+elif 100 <= result.returncode <= 119:
+    print("Software error - investigate")
+    sys.exit(2)
+else:
+    print(f"Unexpected exit code: {result.returncode}")
+    sys.exit(3)
+```
+
+### CI/CD (GitHub Actions)
+
+```yaml
+name: Test with bdg
+on: [push]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Start bdg session
+        id: bdg
+        run: |
+          bdg http://localhost:3000 --headless
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+        continue-on-error: true
+      
+      - name: Check result
+        run: |
+          CODE=${{ steps.bdg.outputs.exit_code }}
+          if [ $CODE -eq 0 ]; then
+            echo "✅ Session started"
+          elif [ $CODE -ge 80 ] && [ $CODE -le 99 ]; then
+            echo "❌ User error (exit $CODE)"
+            exit 1
+          elif [ $CODE -ge 100 ] && [ $CODE -le 119 ]; then
+            echo "❌ Software error (exit $CODE)"
+            exit 2
+          fi
+```
+
+## JSON Output
+
+When using `--json` flag, exit codes are included in error responses:
+
+```bash
+bdg status --json
+```
+
+```json
+{
+  "version": "0.5.1",
+  "success": false,
+  "error": "No active session found",
+  "exitCode": 83,
+  "suggestion": "Start a session with: bdg <url>"
+}
+```
+
+**Access via jq**:
+```bash
+RESPONSE=$(bdg status --json)
+EXIT_CODE=$(echo $RESPONSE | jq '.exitCode')
+
+if [ $EXIT_CODE -eq 83 ]; then
+  echo "No session - starting one"
+  bdg localhost:3000
+fi
+```
+
+## Discovering Exit Codes
+
+Use `bdg --help --json` to get machine-readable documentation including all exit codes:
+
+```bash
+bdg --help --json | jq '.exitCodes'
+```
+
+```json
+[
+  {"code": 0, "name": "SUCCESS", "description": "Operation completed successfully"},
+  {"code": 1, "name": "GENERIC_FAILURE", "description": "Generic failure"},
+  {"code": 80, "name": "INVALID_URL", "description": "Invalid URL format"},
+  {"code": 81, "name": "INVALID_ARGUMENTS", "description": "Invalid arguments"},
+  ...
+]
+```
+
+## Stability Guarantees
+
+<Note>
+  **Exit codes are stable public API**
+</Note>
+
+### Versioning Policy
+
+- ✅ Exit code **values** will not change in minor versions
+- ✅ New exit codes may be **added** in minor versions (within ranges)
+- ✅ Exit code **semantics** (meaning) remain consistent
+- ⚠️ Existing codes only **removed** in major versions with deprecation notice
+
+### Migration Policy
+
+- Deprecated codes documented in CHANGELOG.md
+- Deprecated codes functional for at least one major version
+- Clear migration path provided
+
+## Source Code
+
+**Definition**: `src/utils/exitCodes.ts`
+
+```typescript
+export const EXIT_CODES = {
+  SUCCESS: 0,
+  GENERIC_FAILURE: 1,
+  INVALID_URL: 80,
+  INVALID_ARGUMENTS: 81,
+  PERMISSION_DENIED: 82,
+  RESOURCE_NOT_FOUND: 83,
+  RESOURCE_ALREADY_EXISTS: 84,
+  RESOURCE_BUSY: 85,
+  DAEMON_ALREADY_RUNNING: 86,
+  STALE_CACHE: 87,
+  NO_FORMS_FOUND: 88,
+  FORM_IN_IFRAME: 89,
+  CHROME_LAUNCH_FAILURE: 100,
+  CDP_CONNECTION_FAILURE: 101,
+  CDP_TIMEOUT: 102,
+  SESSION_FILE_ERROR: 103,
+  UNHANDLED_EXCEPTION: 104,
+  SIGNAL_HANDLER_ERROR: 105,
+  SOFTWARE_ERROR: 110,
+} as const;
+```
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Architecture" icon="diagram-project" href="/advanced/architecture">
+    Understanding bdg's process model
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/advanced/troubleshooting">
+    Common errors and diagnostic commands
+  </Card>
+</CardGroup>

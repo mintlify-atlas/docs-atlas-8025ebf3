@@ -1,0 +1,252 @@
+---
+title: "network getCookies"
+description: "List cookies from the current page"
+---
+
+## Synopsis
+
+Retrieve cookies from the current page using Chrome DevTools Protocol's Network.getCookies method.
+
+```bash
+bdg network getCookies [options]
+```
+
+## Description
+
+The `network getCookies` command retrieves all cookies accessible from the current page context. Returns cookies for the current page's domain and any parent domains, including HttpOnly and Secure cookies.
+
+This command directly invokes CDP's `Network.getCookies` method and displays results in a human-readable format.
+
+## Options
+
+<ParamField path="--url" type="string">
+  Filter cookies by URL. Only returns cookies that would be sent with a request to this URL.
+  
+  **Example:** `--url https://example.com/api`
+</ParamField>
+
+<ParamField path="--json" type="flag">
+  Output results in JSON format for programmatic consumption.
+</ParamField>
+
+## Output Format
+
+### Human-readable (default)
+
+```
+3 Cookies:
+
+[1] session_id
+  Value: abc123def456ghi789
+  Domain: .example.com
+  Path: /
+  Expires: 2026-04-05T14:30:22.000Z
+  HttpOnly: Yes
+  Secure: Yes
+  SameSite: Lax
+
+[2] preferences
+  Value: {"theme":"dark","lang":"en"}
+  Domain: example.com
+  Path: /
+  Expires: Session
+  HttpOnly: No
+  Secure: No
+  SameSite: None
+
+[3] tracking_consent
+  Value: accepted
+  Domain: .example.com
+  Path: /
+  Expires: 2027-03-05T14:30:22.000Z
+  HttpOnly: No
+  Secure: Yes
+  SameSite: Strict
+```
+
+### JSON Format
+
+```json
+{
+  "version": "1.2.3",
+  "success": true,
+  "data": [
+    {
+      "name": "session_id",
+      "value": "abc123def456ghi789",
+      "domain": ".example.com",
+      "path": "/",
+      "expires": 1743782222,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "preferences",
+      "value": "{\"theme\":\"dark\",\"lang\":\"en\"}",
+      "domain": "example.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "None"
+    }
+  ]
+}
+```
+
+## Cookie Properties
+
+### name
+Cookie name/key.
+
+### value
+Cookie value. May contain JSON or other structured data.
+
+### domain
+Domain scope for the cookie. Leading dot (`.example.com`) indicates cookie is valid for all subdomains.
+
+### path
+URL path scope. Cookie is only sent for requests matching this path prefix.
+
+### expires
+Expiration timestamp (Unix epoch seconds). Special values:
+- `Session` - Cookie expires when browser closes (expires = -1 in JSON)
+- ISO date string - Persistent cookie expiration time
+
+### httpOnly
+If `Yes`, cookie is inaccessible to JavaScript (document.cookie). HTTP-only cookies are only sent in HTTP requests.
+
+### secure
+If `Yes`, cookie is only sent over HTTPS connections.
+
+### sameSite
+Cross-site request behavior:
+- `Strict` - Cookie never sent in cross-site requests
+- `Lax` - Cookie sent in top-level navigation (clicked links) but not embedded requests
+- `None` - Cookie sent in all cross-site requests (requires Secure flag)
+
+## Examples
+
+### List all cookies
+
+```bash
+bdg network getCookies
+```
+
+### List cookies for specific URL
+
+```bash
+bdg network getCookies --url https://example.com/api/users
+```
+
+### Get cookies as JSON
+
+```bash
+bdg network getCookies --json
+```
+
+### Extract specific cookie value with jq
+
+```bash
+bdg network getCookies --json | jq -r '.data[] | select(.name == "session_id") | .value'
+```
+
+### Check if authentication cookie exists
+
+```bash
+bdg network getCookies --json | jq '.data[] | select(.name == "auth_token") | .expires'
+```
+
+### Find insecure cookies
+
+```bash
+bdg network getCookies --json | jq '.data[] | select(.secure == false)'
+```
+
+### List HttpOnly cookies
+
+```bash
+bdg network getCookies --json | jq '.data[] | select(.httpOnly == true)'
+```
+
+### Export cookies to file
+
+```bash
+bdg network getCookies --json > cookies.json
+```
+
+## Use Cases
+
+### Debug authentication issues
+
+```bash
+# Check if session cookie is present and valid
+bdg network getCookies | grep -A7 "session"
+```
+
+### Verify cookie security settings
+
+```bash
+# Find cookies without Secure flag
+bdg network getCookies --json | jq '.data[] | select(.secure == false) | .name'
+```
+
+### Check cookie expiration
+
+```bash
+# List session cookies (expire on browser close)
+bdg network getCookies --json | jq '.data[] | select(.expires == -1)'
+```
+
+### Audit SameSite configuration
+
+```bash
+# Find cookies without SameSite protection
+bdg network getCookies --json | jq '.data[] | select(.sameSite == null or .sameSite == "None")'
+```
+
+## Exit Codes
+
+<ResponseField name="0" type="SUCCESS">
+  Cookies retrieved successfully (may return empty list)
+</ResponseField>
+
+<ResponseField name="83" type="RESOURCE_NOT_FOUND">
+  No active session found
+</ResponseField>
+
+<ResponseField name="101" type="CDP_CONNECTION_FAILURE">
+  Failed to connect to daemon
+</ResponseField>
+
+<ResponseField name="102" type="CDP_TIMEOUT">
+  CDP method call timed out
+</ResponseField>
+
+## Tips
+
+<Tip>
+  **Session vs Persistent**: Session cookies have `Expires: Session` (expires = -1 in JSON) and are cleared when the browser closes. Persistent cookies have a specific expiration date.
+</Tip>
+
+<Tip>
+  **Domain Scope**: Cookies with domain `.example.com` (leading dot) are sent to `example.com` and all subdomains like `api.example.com`. Cookies with domain `example.com` (no leading dot) are only sent to `example.com`.
+</Tip>
+
+<Tip>
+  **URL Filtering**: Use `--url` to see exactly which cookies would be sent with a specific request:
+  ```bash
+  bdg network getCookies --url https://api.example.com/v1/users
+  ```
+</Tip>
+
+<Warning>
+  HttpOnly cookies are invisible to JavaScript but visible to this command. Be careful when logging or sharing cookie data as it may contain sensitive authentication tokens.
+</Warning>
+
+## See Also
+
+- [network headers](/commands/network/headers) - Inspect HTTP headers (including Set-Cookie)
+- [cdp](/commands/cdp/overview) - Execute arbitrary CDP methods
+- [network list](/commands/network/list) - List network requests

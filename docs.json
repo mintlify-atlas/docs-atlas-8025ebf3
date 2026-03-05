@@ -1,122 +1,149 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Browser Debugger CLI",
+  "theme": "aspen",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#cb0404",
+    "light": "#f3d2d2",
+    "dark": "#e37b84"
   },
-  "favicon": "/favicon.svg",
+  "favicon": "https://media.brand.dev/7316e6d5-0198-4785-94cd-cb9b972e0c98.png",
+  "logo": {
+    "light": "https://media.brand.dev/7316e6d5-0198-4785-94cd-cb9b972e0c98.png",
+    "dark": "https://media.brand.dev/d0bd54b1-0a8c-48a1-8fc0-be53e565a398.png"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/szymdzum/browser-debugger-cli"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/szymdzum/browser-debugger-cli"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "installation",
+              "quickstart"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "concepts/sessions",
+              "concepts/cdp-access",
+              "concepts/agent-friendly-design"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Guides",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "guides/dom-inspection",
+              "guides/network-monitoring",
+              "guides/console-debugging",
+              "guides/forms-and-interaction",
+              "guides/screenshots"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "For AI Agents",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "agents/overview",
+              "agents/discovery-pattern",
+              "agents/error-handling",
+              "agents/benchmarks"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/architecture",
+              "advanced/exit-codes",
+              "advanced/troubleshooting"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "Command Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Session Management",
             "pages": [
-              "api-reference/introduction"
+              "commands/start",
+              "commands/status",
+              "commands/stop",
+              "commands/cleanup"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Data Inspection",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "commands/peek",
+              "commands/tail",
+              "commands/details"
+            ]
+          },
+          {
+            "group": "DOM Commands",
+            "pages": [
+              "commands/dom/query",
+              "commands/dom/get",
+              "commands/dom/eval",
+              "commands/dom/click",
+              "commands/dom/fill",
+              "commands/dom/scroll",
+              "commands/dom/screenshot",
+              "commands/dom/a11y"
+            ]
+          },
+          {
+            "group": "Network Commands",
+            "pages": [
+              "commands/network/list",
+              "commands/network/har",
+              "commands/network/cookies",
+              "commands/network/headers"
+            ]
+          },
+          {
+            "group": "CDP Commands",
+            "pages": [
+              "commands/cdp/overview",
+              "commands/cdp/domains"
+            ]
+          },
+          {
+            "group": "Console Commands",
+            "pages": [
+              "commands/console"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Recipes",
+        "groups": [
+          {
+            "group": "Common Tasks",
+            "pages": [
+              "recipes/debugging-spa",
+              "recipes/testing-forms",
+              "recipes/monitoring-apis",
+              "recipes/extracting-data"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

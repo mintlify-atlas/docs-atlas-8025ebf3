@@ -1,0 +1,424 @@
+---
+title: CDP Access
+description: Direct access to Chrome DevTools Protocol for advanced automation
+---
+
+## What is CDP?
+
+The **Chrome DevTools Protocol (CDP)** is a low-level protocol that enables programmatic control and inspection of Chrome/Chromium browsers. It provides access to:
+
+- DOM inspection and manipulation
+- Network request interception and modification
+- JavaScript execution and debugging
+- Performance profiling and tracing
+- Emulation (device, geolocation, timezone)
+- Security features (certificate errors, mixed content)
+
+**Browser Debugger CLI exposes CDP directly** for operations not covered by high-level commands.
+
+## CDP Architecture
+
+```text
+bdg cdp → Unix Socket → Worker → WebSocket → Chrome DevTools Protocol
+```
+
+**Connection details** (`src/connection/cdp.ts`):
+
+- **Transport**: WebSocket (typically `ws://localhost:9222/devtools/page/{targetId}`)
+- **Protocol**: JSON-RPC 2.0 style (method calls with ID-based responses)
+- **Domains**: 53 domains (Page, Network, DOM, Runtime, etc.)
+- **Methods**: 300+ methods across all domains
+
+## Discovery Features
+
+CDP is **self-documenting**. Use discovery commands to explore capabilities:
+
+### List All Domains
+
+```bash
+bdg cdp --list
+```
+
+**Output** (53 domains):
+
+```json
+{
+  "count": 53,
+  "domains": [
+    {
+      "name": "Network",
+      "description": "Network domain allows tracking network activities",
+      "commands": 42,
+      "events": 18,
+      "experimental": false
+    },
+    {
+      "name": "Page",
+      "description": "Actions and events related to the inspected page",
+      "commands": 67,
+      "events": 23,
+      "experimental": false
+    }
+  ]
+}
+```
+
+### List Methods in a Domain
+
+```bash
+bdg cdp Network --list
+```
+
+**Output** (Network domain has 42 methods):
+
+```json
+{
+  "domain": "Network",
+  "count": 42,
+  "methods": [
+    {
+      "name": "getCookies",
+      "fullName": "Network.getCookies",
+      "description": "Returns all browser cookies",
+      "parameterCount": 1,
+      "parameters": [
+        {"name": "urls", "type": "array", "required": false}
+      ],
+      "example": "bdg cdp Network.getCookies"
+    }
+  ]
+}
+```
+
+### Describe a Method
+
+```bash
+bdg cdp Network.getCookies --describe
+```
+
+**Output** (full method schema):
+
+```json
+{
+  "type": "method",
+  "name": "Network.getCookies",
+  "domain": "Network",
+  "method": "getCookies",
+  "description": "Returns all browser cookies for the current URL",
+  "parameters": [
+    {
+      "name": "urls",
+      "type": "array",
+      "required": false,
+      "description": "The list of URLs for which to fetch cookies",
+      "items": {"type": "string"}
+    }
+  ],
+  "returns": [
+    {
+      "name": "cookies",
+      "type": "array",
+      "description": "Array of cookie objects"
+    }
+  ],
+  "example": {
+    "command": "bdg cdp Network.getCookies",
+    "description": "Get all cookies for current page"
+  }
+}
+```
+
+### Search Methods by Keyword
+
+```bash
+bdg cdp --search cookie
+```
+
+**Output** (all methods matching "cookie"):
+
+```json
+{
+  "query": "cookie",
+  "count": 8,
+  "methods": [
+    {
+      "name": "Network.getCookies",
+      "domain": "Network",
+      "description": "Returns all browser cookies",
+      "example": "bdg cdp Network.getCookies"
+    },
+    {
+      "name": "Network.setCookie",
+      "domain": "Network",
+      "description": "Sets a cookie with the given data",
+      "example": "bdg cdp Network.setCookie --params '{...}'"
+    }
+  ]
+}
+```
+
+## Executing CDP Methods
+
+### Basic Execution
+
+```bash
+bdg cdp Runtime.evaluate --params '{"expression":"document.title"}'
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "method": "Runtime.evaluate",
+    "result": {
+      "result": {
+        "type": "string",
+        "value": "Example Domain"
+      }
+    }
+  }
+}
+```
+
+### Case-Insensitive Method Names
+
+Method names are **case-insensitive** (`src/commands/cdp.ts:105`):
+
+```bash
+# All equivalent:
+bdg cdp Network.getCookies
+bdg cdp network.getcookies
+bdg cdp NETWORK.GETCOOKIES
+```
+
+### Methods Without Parameters
+
+```bash
+bdg cdp Network.getCookies
+bdg cdp Page.reload
+bdg cdp Runtime.getIsolateId
+```
+
+### Methods With Parameters
+
+Parameters must be valid JSON (`--params` flag):
+
+```bash
+# Set cookie
+bdg cdp Network.setCookie --params '{
+  "name": "session_id",
+  "value": "abc123",
+  "domain": "example.com"
+}'
+
+# Navigate to URL
+bdg cdp Page.navigate --params '{"url":"https://example.com"}'
+
+# Evaluate JavaScript
+bdg cdp Runtime.evaluate --params '{
+  "expression": "Array.from(document.querySelectorAll('a')).length",
+  "returnByValue": true
+}'
+```
+
+## Common CDP Domains
+
+### Page Domain
+
+Control page lifecycle and navigation:
+
+```bash
+# Reload page
+bdg cdp Page.reload
+
+# Navigate to URL
+bdg cdp Page.navigate --params '{"url":"https://example.com"}'
+
+# Get page layout metrics
+bdg cdp Page.getLayoutMetrics
+
+# Enable page domain events
+bdg cdp Page.enable
+```
+
+### Network Domain
+
+Inspect and control network requests:
+
+```bash
+# Get cookies
+bdg cdp Network.getCookies
+
+# Clear browser cookies
+bdg cdp Network.clearBrowserCookies
+
+# Get response body for a request
+bdg cdp Network.getResponseBody --params '{"requestId":"123.45"}'
+
+# Enable network tracking
+bdg cdp Network.enable
+```
+
+### Runtime Domain
+
+Execute JavaScript and inspect runtime:
+
+```bash
+# Evaluate expression
+bdg cdp Runtime.evaluate --params '{
+  "expression": "document.title",
+  "returnByValue": true
+}'
+
+# Call function on object
+bdg cdp Runtime.callFunctionOn --params '{
+  "functionDeclaration": "function() { return this.length; }",
+  "objectId": "node-123"
+}'
+
+# Get heap usage
+bdg cdp Runtime.getHeapUsage
+```
+
+### DOM Domain
+
+Inspect and manipulate DOM:
+
+```bash
+# Get document root
+bdg cdp DOM.getDocument
+
+# Query selector
+bdg cdp DOM.querySelector --params '{
+  "nodeId": 1,
+  "selector": "h1"
+}'
+
+# Get node attributes
+bdg cdp DOM.getAttributes --params '{"nodeId": 123}'
+```
+
+### Emulation Domain
+
+Emulate devices and environments:
+
+```bash
+# Set device metrics
+bdg cdp Emulation.setDeviceMetricsOverride --params '{
+  "width": 375,
+  "height": 667,
+  "deviceScaleFactor": 2,
+  "mobile": true
+}'
+
+# Set geolocation
+bdg cdp Emulation.setGeolocationOverride --params '{
+  "latitude": 37.7749,
+  "longitude": -122.4194,
+  "accuracy": 100
+}'
+
+# Set timezone
+bdg cdp Emulation.setTimezoneOverride --params '{"timezoneId":"America/New_York"}'
+```
+
+## Event-Based Domains
+
+Some CDP domains use **events** instead of request/response patterns (`src/commands/cdp.ts:25`):
+
+| Domain | Behavior | Notes |
+|--------|----------|-------|
+| `Audits` | Results via `Audits.issueAdded` events | Use `bdg dom eval` for direct contrast checking |
+| `Overlay` | Visual feedback only (empty responses) | Use `Overlay.hideHighlight` to clear |
+| `Profiler` | Call `start`, perform actions, then `stop` | Profile data returned from `stop` |
+| `Tracing` | Data arrives via `Tracing.dataCollected` events | Call `start`, perform actions, then `end` |
+
+**Example (Audits domain):**
+
+```bash
+# Enable audits (events will be fired, but not returned here)
+bdg cdp Audits.enable
+
+# Alternative: Direct evaluation
+bdg dom eval 'getComputedStyle(document.querySelector("p")).color'
+```
+
+## Error Handling
+
+### Method Not Found
+
+Includes typo suggestions (`src/commands/cdp.ts:159`):
+
+```bash
+$ bdg cdp Network.getCookiez
+Error: Method 'Network.getCookiez' not found
+
+Did you mean:
+  - Network.getCookies
+  - Network.deleteCookies
+  - Network.setCookie
+
+Use: bdg cdp --search cookie
+```
+
+### Invalid Parameters
+
+JSON validation with helpful hints:
+
+```bash
+$ bdg cdp Network.setCookie --params '{invalid}'
+Error: Error parsing --params: Unexpected token i in JSON at position 1
+
+Use: bdg cdp Network.setCookie --describe (to see parameter schema)
+```
+
+### CDP Timeout
+
+Commands timeout after 30 seconds (`src/connection/cdp.ts:604`):
+
+```
+Command timeout: DOM.getDocument
+
+The browser did not respond within 30s.
+
+Possible causes:
+  - Browser became unresponsive or frozen
+  - Heavy page load or JavaScript execution
+  - Network issues or slow connection
+```
+
+**Exit code**: `102` (CDP_TIMEOUT)
+
+## Blocked Methods
+
+Some methods return large binary data that corrupts terminal output (`src/commands/cdp.ts:402`):
+
+```bash
+$ bdg cdp Page.captureScreenshot
+Error: Page.captureScreenshot is blocked via raw CDP
+Reason: Returns large base64 data that corrupts terminal sessions
+Use: bdg dom screenshot [path]
+```
+
+## Official CDP Documentation
+
+For complete CDP reference:
+
+- **Chrome DevTools Protocol Viewer**: [https://chromedevtools.github.io/devtools-protocol/](https://chromedevtools.github.io/devtools-protocol/)
+- **Protocol JSON**: [https://github.com/ChromeDevTools/devtools-protocol](https://github.com/ChromeDevTools/devtools-protocol)
+
+<Tip>
+**Discover before implementing**: Use `--list`, `--search`, and `--describe` to explore CDP capabilities programmatically before writing automation scripts.
+</Tip>
+
+<Warning>
+**Enable domains first**: Many CDP domains require calling `Domain.enable` before their events or methods work (e.g., `Network.enable`, `Page.enable`).
+</Warning>
+
+## Related Commands
+
+- [`bdg cdp`](/commands/cdp/overview) - CDP command reference
+- [`bdg dom eval`](/commands/dom/eval) - Evaluate JavaScript (simpler than Runtime.evaluate)
+- [`bdg status`](/commands/status) - Check CDP connection health

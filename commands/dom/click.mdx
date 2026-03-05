@@ -1,0 +1,185 @@
+---
+title: "bdg dom click"
+description: "Click elements and wait for network stability"
+---
+
+## Overview
+
+Click an element using React-compatible synthetic events. Automatically waits for network stability after the action unless disabled with `--no-wait`.
+
+## Syntax
+
+```bash
+bdg dom click <selector> [options]
+```
+
+## Arguments
+
+<ParamField path="selector" type="string" required>
+  CSS selector or numeric index from cached query results (0-based)
+</ParamField>
+
+## Options
+
+<ParamField path="--index" type="number">
+  Element index if selector matches multiple elements (0-based)
+</ParamField>
+
+<ParamField path="--no-wait" type="flag">
+  Skip waiting for network stability after click
+</ParamField>
+
+<ParamField path="--json" type="flag">
+  Output as JSON
+</ParamField>
+
+## Behavior
+
+### Event dispatch
+
+- Dispatches React-compatible synthetic events: `mousedown`, `mouseup`, `click`
+- Works with both native DOM elements and React components
+- Properly triggers React event handlers (`onClick`, etc.)
+
+### Automatic waiting
+
+By default, waits for page stability after click:
+- Network idle (no requests for 150ms)
+- DOM stable (no mutations for 200ms)
+- Maximum wait: 2 seconds
+
+Disable with `--no-wait` for fast, non-navigating clicks.
+
+## Examples
+
+### Click by selector
+
+```bash
+# By ID
+bdg dom click "#login-btn"
+
+# By class
+bdg dom click ".submit-button"
+
+# By attribute
+bdg dom click "button[type='submit']"
+```
+
+### Click by cached index
+
+```bash
+# Step 1: Query and cache
+bdg dom query "button"
+# Found 3 elements:
+# [0] <button.primary> "Submit"
+# [1] <button.secondary> "Cancel"
+# [2] <button.link> "Learn more"
+
+# Step 2: Click by index
+bdg dom click 0  # Click Submit
+bdg dom click 1  # Click Cancel
+```
+
+### Click specific match
+
+```bash
+# Click 2nd button (0-based indexing)
+bdg dom click "button" --index 1
+```
+
+### Skip stability wait
+
+```bash
+# For fast, non-navigating clicks
+bdg dom click "#fast-btn" --no-wait
+```
+
+## Common workflows
+
+### Form submission
+
+```bash
+# Fill form and submit
+bdg dom fill "#email" "user@example.com"
+bdg dom fill "#password" "SecurePass123"
+bdg dom click "button[type='submit']"
+# Automatically waits for page response
+```
+
+### Multi-step navigation
+
+```bash
+# Query tabs
+bdg dom query ".tab"
+# [0] <div.tab> "Overview"
+# [1] <div.tab> "Details"
+# [2] <div.tab> "History"
+
+# Click second tab
+bdg dom click 1
+# Waits for tab content to load
+```
+
+### Toggle states
+
+```bash
+# Toggle checkbox
+bdg dom click "#terms-checkbox"
+
+# Open dropdown
+bdg dom click ".dropdown-trigger"
+```
+
+## Exit codes
+
+<ParamField path="0" type="number">
+  Success - element clicked
+</ParamField>
+
+<ParamField path="83" type="number">
+  RESOURCE_NOT_FOUND - element not found
+</ParamField>
+
+<ParamField path="87" type="number">
+  STALE_CACHE - cached index invalid (page navigation)
+</ParamField>
+
+<ParamField path="102" type="number">
+  CDP_TIMEOUT - CDP operation timed out
+</ParamField>
+
+## Comparison with other click methods
+
+| Method | Use case |
+|--------|----------|
+| `bdg dom click` | General clicking with React support |
+| `bdg dom submit` | Form submission with navigation wait |
+| `bdg dom pressKey <selector> Enter` | Keyboard-based submission |
+
+## Troubleshooting
+
+### Element not clickable
+
+If the element is not visible or clickable:
+1. Scroll element into view first: `bdg dom scroll <selector>`
+2. Check element exists: `bdg dom query <selector>`
+3. Verify element is not disabled: `bdg dom get <selector>`
+
+### Click doesn't trigger action
+
+For elements that require specific event sequences:
+- Use `bdg dom pressKey <selector> Enter` for keyboard submission
+- Use `bdg dom submit` for form submissions with navigation
+
+### Slow response
+
+If clicks are slow due to stability waiting:
+- Use `--no-wait` for clicks that don't trigger network activity
+- Adjust network idle threshold (currently 150ms)
+
+## Related commands
+
+- [`bdg dom fill`](/commands/dom/fill) - Fill form fields
+- [`bdg dom submit`](/guides/forms-and-interaction) - Submit forms with navigation wait
+- [`bdg dom query`](/commands/dom/query) - Find elements to click
+- [`bdg dom scroll`](/commands/dom/scroll) - Scroll element into view

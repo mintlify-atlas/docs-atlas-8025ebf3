@@ -1,0 +1,512 @@
+---
+title: 'Network Monitoring'
+description: 'Monitor HTTP requests, filter network traffic, and export HAR files'
+---
+
+## Overview
+
+Browser Debugger CLI captures all network activity during your session, allowing you to:
+
+- List and filter HTTP requests
+- Inspect request/response headers
+- Export HAR files for analysis
+- Monitor network activity in real-time
+- Analyze cookies and security headers
+
+All network requests are captured automatically when you start a session.
+
+## List Network Requests
+
+### Basic Usage
+
+```bash
+# List last 100 requests (default)
+bdg network list
+
+# Show all requests
+bdg network list --last 0
+
+# Show last 50 requests
+bdg network list --last 50
+```
+
+**Output:**
+```
+Network Requests (showing 10/247)
+
+GET  200  /api/users        1.2kB  142ms
+POST 201  /api/posts        456B   89ms
+GET  200  /static/app.js    245kB  234ms
+GET  304  /static/logo.png  -      12ms
+GET  404  /missing.css      -      45ms
+```
+
+### Verbose Output
+
+Show full URLs and additional details:
+
+```bash
+bdg network list --verbose
+```
+
+**Output:**
+```
+Network Requests (showing 10/247)
+
+GET  200  https://api.example.com/v1/users        Document  1.2kB  142ms
+POST 201  https://api.example.com/v1/posts        XHR       456B   89ms
+GET  200  https://cdn.example.com/static/app.js   Script    245kB  234ms
+GET  304  https://cdn.example.com/static/logo.png Image     -      12ms
+GET  404  https://example.com/missing.css         Stylesheet -     45ms
+```
+
+## Filter Network Traffic
+
+### By Status Code
+
+```bash
+# Show all errors (4xx and 5xx)
+bdg network list --filter "status-code:>=400"
+
+# Show only 200 OK responses
+bdg network list --filter "status-code:200"
+
+# Show server errors only
+bdg network list --filter "status-code:>=500"
+```
+
+**Operators:**
+- `=` - Equal (default)
+- `>=` - Greater than or equal
+- `<=` - Less than or equal
+- `>` - Greater than
+- `<` - Less than
+
+### By Domain
+
+```bash
+# API subdomain
+bdg network list --filter "domain:api.*"
+
+# All subdomains
+bdg network list --filter "domain:*.example.com"
+
+# Exclude CDN
+bdg network list --filter "!domain:cdn.*"
+```
+
+<Note>
+  Domain filters support wildcards (`*`) and negation (`!`) prefix.
+</Note>
+
+### By HTTP Method
+
+```bash
+# POST requests only
+bdg network list --filter "method:POST"
+
+# All except GET
+bdg network list --filter "!method:GET"
+
+# DELETE requests
+bdg network list --filter "method:DELETE"
+```
+
+### By Resource Type
+
+```bash
+# XHR and Fetch requests
+bdg network list --filter "resource-type:XHR,Fetch"
+
+# Documents only
+bdg network list --type Document
+
+# Scripts and stylesheets
+bdg network list --type Script,Stylesheet
+```
+
+**Valid Resource Types:**
+`Document`, `Stylesheet`, `Image`, `Media`, `Font`, `Script`, `TextTrack`, `XHR`, `Fetch`, `Prefetch`, `EventSource`, `WebSocket`, `Manifest`, `SignedExchange`, `Ping`, `CSPViolationReport`, `Preflight`, `FedCM`, `Other`
+
+### By MIME Type
+
+```bash
+# JSON responses
+bdg network list --filter "mime-type:application/json"
+
+# HTML documents
+bdg network list --filter "mime-type:text/html"
+```
+
+### By Size
+
+```bash
+# Large responses (>1MB)
+bdg network list --filter "larger-than:1MB"
+
+# Small responses (>100KB)
+bdg network list --filter "larger-than:100KB"
+```
+
+**Size Units:** `B`, `KB`, `MB`, `GB`
+
+### By Headers
+
+```bash
+# Has Set-Cookie header
+bdg network list --filter "has-response-header:set-cookie"
+
+# Has CSP header
+bdg network list --filter "has-response-header:content-security-policy"
+```
+
+### By State
+
+```bash
+# Cached responses
+bdg network list --filter "is:from-cache"
+
+# In-progress requests
+bdg network list --filter "is:running"
+```
+
+### By Scheme
+
+```bash
+# HTTPS only
+bdg network list --filter "scheme:https"
+
+# WebSocket secure
+bdg network list --filter "scheme:wss"
+```
+
+### Combine Multiple Filters
+
+Filters are combined with AND logic:
+
+```bash
+# API errors
+bdg network list --filter "domain:api.* status-code:>=400"
+
+# Large POST requests
+bdg network list --filter "method:POST larger-than:1MB"
+
+# JSON XHR requests
+bdg network list --filter "mime-type:application/json resource-type:XHR"
+```
+
+## Filter Presets
+
+Common filter combinations are available as presets:
+
+```bash
+# Show all errors
+bdg network list --preset errors
+
+# API requests (XHR/Fetch)
+bdg network list --preset api
+
+# Large files (>1MB)
+bdg network list --preset large
+
+# Cached responses
+bdg network list --preset cached
+
+# HTML documents
+bdg network list --preset documents
+
+# Images and media
+bdg network list --preset media
+
+# JavaScript files
+bdg network list --preset scripts
+
+# Pending requests
+bdg network list --preset pending
+```
+
+### Combine Presets with Filters
+
+```bash
+# API errors
+bdg network list --preset api --filter "status-code:>=400"
+
+# Large cached files
+bdg network list --preset large --filter "is:from-cache"
+```
+
+## Real-Time Monitoring
+
+Stream network requests as they happen:
+
+```bash
+# Follow mode (updates every second)
+bdg network list --follow
+
+# Follow with filters
+bdg network list --follow --filter "status-code:>=400"
+
+# Follow specific type
+bdg network list --follow --preset api
+```
+
+<Tabs>
+  <Tab title="All Requests">
+    ```bash
+    bdg network list --follow
+    ```
+  </Tab>
+  <Tab title="Errors Only">
+    ```bash
+    bdg network list --follow --filter "status-code:>=400"
+    ```
+  </Tab>
+  <Tab title="API Calls">
+    ```bash
+    bdg network list --follow --preset api
+    ```
+  </Tab>
+</Tabs>
+
+## Inspect Headers
+
+Examine request and response headers:
+
+```bash
+# Show headers from main page navigation (smart default)
+bdg network headers
+
+# Show headers from specific request
+bdg network headers <request-id>
+
+# Filter to specific header (case-insensitive)
+bdg network headers --header content-security-policy
+bdg network headers --header Content-Type
+
+# JSON output
+bdg network headers --json
+```
+
+### Get Request ID
+
+```bash
+# Use peek to find request IDs
+bdg peek --network --json | jq -r '.data.preview.data.network[0].requestId'
+
+# Or use jq to find specific requests
+bdg peek --json | jq -r '.data.preview.data.network[] | select(.url | contains("api")) | .requestId'
+```
+
+### Security Headers Analysis
+
+<Steps>
+  <Step title="Check CSP">
+    ```bash
+    bdg network headers --header content-security-policy
+    ```
+  </Step>
+  
+  <Step title="Check HSTS">
+    ```bash
+    bdg network headers --header strict-transport-security
+    ```
+  </Step>
+  
+  <Step title="Check CORS">
+    ```bash
+    bdg network headers --header access-control-allow-origin
+    ```
+  </Step>
+  
+  <Step title="Export All">
+    ```bash
+    bdg network headers --json > headers.json
+    jq '.data.responseHeaders' headers.json
+    ```
+  </Step>
+</Steps>
+
+## HAR Export
+
+Export network activity as HAR (HTTP Archive) 1.2 format:
+
+```bash
+# Export from live session
+bdg network har
+
+# Custom filename
+bdg network har myfile.har
+
+# Absolute path
+bdg network har ~/exports/debug.har
+
+# After session stopped
+bdg stop
+bdg network har final.har
+```
+
+**Default location:** `~/.bdg/capture-YYYY-MM-DD-HHMMSS.har`
+
+### HAR File Contents
+
+- Valid HAR 1.2 format
+- All request/response data (URLs, methods, headers, bodies)
+- Complete timing breakdown: blocked, DNS, connect, SSL, send, wait, receive
+- Binary content automatically base64 encoded
+- Creator and browser metadata
+- Server IP address and connection ID tracking
+
+### Multiple Snapshots
+
+```bash
+# Capture session
+bdg https://example.com --headless
+
+# Export snapshot 1
+bdg network har snapshot1.har
+
+# ... wait for more activity ...
+
+# Export snapshot 2
+bdg network har snapshot2.har
+
+# Stop and export final
+bdg stop
+bdg network har final.har
+```
+
+### Analyze HAR Files
+
+<CardGroup cols={2}>
+  <Card title="Chrome DevTools" icon="chrome">
+    Drag and drop HAR file into Chrome DevTools → Network tab
+  </Card>
+  
+  <Card title="HAR Viewer" icon="globe">
+    Open in online viewer: http://www.softwareishard.com/har/viewer/
+  </Card>
+</CardGroup>
+
+## Inspect Cookies
+
+List cookies for the current page:
+
+```bash
+# List all cookies
+bdg network getCookies
+
+# Filter by URL
+bdg network getCookies --url https://api.example.com
+
+# JSON output
+bdg network getCookies --json
+```
+
+## Workflow Examples
+
+### Debug API Errors
+
+<Steps>
+  <Step title="Start Session">
+    ```bash
+    bdg https://example.com
+    ```
+  </Step>
+  
+  <Step title="List Errors">
+    ```bash
+    bdg network list --preset errors
+    ```
+  </Step>
+  
+  <Step title="Get Request ID">
+    ```bash
+    bdg peek --network --json | jq -r '.data.preview.data.network[] | select(.statusCode >= 400) | .requestId' | head -1
+    ```
+  </Step>
+  
+  <Step title="Inspect Headers">
+    ```bash
+    bdg network headers <request-id>
+    ```
+  </Step>
+  
+  <Step title="Export HAR">
+    ```bash
+    bdg network har debug.har
+    ```
+  </Step>
+</Steps>
+
+### Monitor API Performance
+
+```bash
+# Follow API requests in real-time
+bdg network list --follow --preset api --verbose
+
+# Filter slow requests
+bdg network list --preset api --filter "larger-than:500KB"
+
+# Export for analysis
+bdg network har api-perf.har
+```
+
+### Analyze Caching
+
+```bash
+# List cached responses
+bdg network list --preset cached --verbose
+
+# Find large uncached assets
+bdg network list --filter "!is:from-cache larger-than:100KB"
+
+# Check cache headers
+bdg network list --filter "has-response-header:cache-control" --verbose
+```
+
+## JSON Output
+
+All network commands support `--json` output:
+
+```bash
+bdg network list --json
+bdg network headers --json
+bdg network har --json
+bdg network getCookies --json
+```
+
+### jq Integration
+
+```bash
+# Get all error URLs
+bdg network list --json | jq -r '.data.filtered[] | select(.statusCode >= 400) | .url'
+
+# Calculate total size
+bdg network list --json | jq '[.data.filtered[].responseBodySize] | add'
+
+# Find slowest requests
+bdg network list --json | jq '.data.filtered | sort_by(.duration) | reverse | .[0:5]'
+
+# Extract unique domains
+bdg network list --json | jq -r '.data.filtered[].url' | cut -d'/' -f3 | sort -u
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Console Debugging" icon="terminal" href="/guides/console-debugging">
+    Inspect console messages and errors
+  </Card>
+  
+  <Card title="DOM Inspection" icon="code" href="/guides/dom-inspection">
+    Query and inspect page elements
+  </Card>
+  
+  <Card title="API Reference" icon="book" href="/commands/network/list">
+    Complete network command reference
+  </Card>
+  
+  <Card title="Forms & Interaction" icon="hand-pointer" href="/guides/forms-and-interaction">
+    Interact with forms and elements
+  </Card>
+</CardGroup>

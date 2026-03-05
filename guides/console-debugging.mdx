@@ -1,0 +1,434 @@
+---
+title: 'Console Debugging'
+description: 'Inspect console messages, errors, and warnings with smart filtering'
+---
+
+## Overview
+
+Browser Debugger CLI captures all console messages during your session, providing:
+
+- Smart error and warning prioritization
+- Automatic deduplication
+- Current page vs. history filtering
+- Object expansion for complex data
+- Real-time streaming
+
+Console messages are captured automatically when you start a session.
+
+## Basic Usage
+
+### Smart Summary (Default)
+
+The default behavior shows a smart summary of the current page:
+
+```bash
+bdg console
+```
+
+**Output:**
+```
+Console Messages (current page)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ERRORS (2 unique, 5 total occurrences)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[×3] TypeError: Cannot read property 'map' of undefined
+     at app.js:245:12
+
+[×2] Network error: Failed to fetch /api/users
+     at api.js:89:7
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+WARNINGS (1)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Deprecated API called: getUserInfo()
+  at legacy.js:42:5
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OTHER MESSAGES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+info:  12 messages
+debug: 8 messages
+```
+
+<Note>
+  By default, only messages from the **current page load** are shown. Use `--history` to see all messages from the session.
+</Note>
+
+## Filter by Page Load
+
+### Current Page Only (Default)
+
+```bash
+# Smart summary of current page
+bdg console
+```
+
+Shows only messages from the most recent navigation. Ideal for debugging the current page state.
+
+### All Pages (History)
+
+```bash
+# Show messages from all page loads
+bdg console --history
+
+# Short form
+bdg console -H
+```
+
+Includes messages from all navigations during the session. Useful for tracking issues across page transitions.
+
+## Filter by Level
+
+Filter messages by their severity level:
+
+```bash
+# Errors only
+bdg console --level error
+
+# Warnings only
+bdg console --level warning
+
+# Info messages
+bdg console --level info
+
+# Debug messages
+bdg console --level debug
+```
+
+<Tabs>
+  <Tab title="Errors">
+    ```bash
+    bdg console --level error
+    ```
+    Shows only error messages (console.error, uncaught exceptions)
+  </Tab>
+  <Tab title="Warnings">
+    ```bash
+    bdg console --level warning
+    ```
+    Shows only warning messages (console.warn)
+  </Tab>
+  <Tab title="Info">
+    ```bash
+    bdg console --level info
+    ```
+    Shows info messages (console.log, console.info)
+  </Tab>
+  <Tab title="Debug">
+    ```bash
+    bdg console --level debug
+    ```
+    Shows debug messages (console.debug, console.trace)
+  </Tab>
+</Tabs>
+
+## Chronological List
+
+View all messages in chronological order:
+
+```bash
+# List all messages
+bdg console --list
+
+# Short form
+bdg console -l
+
+# Limit to last 50 messages
+bdg console --list --last 50
+```
+
+**Output:**
+```
+[log]   App initialized
+[info]  Loading user data...
+[warn]  Deprecated API called
+[error] TypeError: Cannot read property 'map' of undefined
+[debug] Request payload: {userId: 123}
+[log]   User data loaded
+```
+
+## Limit Message Count
+
+Control how many messages to display:
+
+```bash
+# Last 50 messages (default: 100)
+bdg console --last 50
+
+# All messages
+bdg console --last 0
+
+# Last 10 errors
+bdg console --level error --last 10
+```
+
+## Object Expansion
+
+Console messages with objects are automatically expanded to show nested values:
+
+```bash
+bdg console
+```
+
+**Without expansion:**
+```
+[log] User: [object Object]
+```
+
+**With expansion:**
+```
+[log] User: {name: "John", email: "john@example.com", roles: ["admin", "user"]}
+```
+
+<Note>
+  Objects are expanded up to 3 levels deep. Large objects are truncated with `…` indicator.
+</Note>
+
+### Expanded Types
+
+- **Objects:** `{key: value, nested: {inner: true}}`
+- **Arrays:** `[1, 2, 3]` instead of `Array(3)`
+- **Dates:** `Date(2025-03-05T12:00:00.000Z)`
+- **RegExp:** `/pattern/flags`
+- **Errors:** `Error: message at stack.js:10`
+- **Maps:** `Map(2) {key1 => value1, key2 => value2}`
+- **Sets:** `Set(3) {value1, value2, value3}`
+
+## Real-Time Streaming
+
+Stream console messages as they occur:
+
+```bash
+# Follow mode
+bdg console --follow
+
+# Short form
+bdg console -f
+
+# Follow errors only
+bdg console --follow --level error
+
+# Follow current page
+bdg console --follow
+
+# Follow all history
+bdg console --follow --history
+```
+
+<Warning>
+  Press Ctrl+C to stop following and return to shell.
+</Warning>
+
+## Combine Filters
+
+Filters can be combined for precise results:
+
+```bash
+# Errors from current page, last 20
+bdg console --level error --last 20
+
+# All warnings from history
+bdg console --level warning --history
+
+# Last 10 info messages as list
+bdg console --level info --list --last 10
+
+# Follow errors from all pages
+bdg console --follow --level error --history
+```
+
+## Workflow Examples
+
+### Debug Application Errors
+
+<Steps>
+  <Step title="Start Session">
+    ```bash
+    bdg https://example.com
+    ```
+  </Step>
+  
+  <Step title="Check Smart Summary">
+    ```bash
+    bdg console
+    ```
+    
+    Shows deduplicated errors with occurrence counts and source locations.
+  </Step>
+  
+  <Step title="Get Full Error List">
+    ```bash
+    bdg console --level error --list
+    ```
+    
+    Chronological list of all errors.
+  </Step>
+  
+  <Step title="Check Network Correlation">
+    ```bash
+    # Check if errors correlate with network failures
+    bdg network list --preset errors
+    ```
+  </Step>
+</Steps>
+
+### Monitor Page Transitions
+
+```bash
+# Start with a page
+bdg https://example.com/page1
+
+# Navigate to another page (via UI)
+# ...
+
+# Check messages from all navigations
+bdg console --history
+
+# Compare current vs previous
+bdg console              # Current page only
+bdg console --history   # All pages
+```
+
+### Track Deprecation Warnings
+
+```bash
+# List all warnings
+bdg console --level warning
+
+# Get full list with timestamps
+bdg console --level warning --list --json | jq '.data.filtered[] | {timestamp, text}'
+
+# Check if warnings repeat across pages
+bdg console --level warning --history
+```
+
+## JSON Output
+
+All console commands support `--json` output:
+
+```bash
+bdg console --json
+bdg console --list --json
+bdg console --level error --json
+```
+
+### JSON Structure
+
+```json
+{
+  "version": "0.5.1",
+  "success": true,
+  "data": {
+    "messages": [...],
+    "filtered": [...],
+    "summary": {
+      "total": 45,
+      "errors": 2,
+      "warnings": 1,
+      "info": 32,
+      "debug": 10,
+      "uniqueErrors": 2,
+      "currentPageOnly": true
+    }
+  }
+}
+```
+
+### jq Integration
+
+```bash
+# Extract error messages
+bdg console --json | jq -r '.data.filtered[] | select(.level == "error") | .text'
+
+# Count by level
+bdg console --json | jq '.data.filtered | group_by(.level) | map({level: .[0].level, count: length})'
+
+# Find errors with stack traces
+bdg console --json | jq '.data.filtered[] | select(.level == "error" and .stackTrace)'
+
+# Get unique error messages
+bdg console --json | jq -r '.data.filtered[] | select(.level == "error") | .text' | sort -u
+
+# Export to file
+bdg console --json > console.json
+```
+
+## Understanding Console Types
+
+Browser Debugger CLI maps Chrome console types to levels:
+
+| Chrome Type | Level | Description |
+|------------|-------|-------------|
+| `error` | error | Errors and exceptions |
+| `warn` | warning | Warnings |
+| `log` | info | console.log() |
+| `info` | info | console.info() |
+| `debug` | debug | console.debug() |
+| `trace` | debug | console.trace() |
+| `dir` | info | console.dir() |
+| `dirxml` | info | console.dirxml() |
+| `table` | info | console.table() |
+| `clear` | info | console.clear() |
+| `count` | info | console.count() |
+| `time` | info | console.time() |
+| `timeEnd` | info | console.timeEnd() |
+| `assert` | error | console.assert() failures |
+
+## Tips and Best Practices
+
+<Tabs>
+  <Tab title="Quick Debugging">
+    Start with the smart summary to see deduplicated errors and warnings:
+    ```bash
+    bdg console
+    ```
+    
+    Then drill down with `--list` or `--level` as needed.
+  </Tab>
+  
+  <Tab title="Multi-Page Apps">
+    Use `--history` to track issues across page navigations:
+    ```bash
+    bdg console --history --level error
+    ```
+  </Tab>
+  
+  <Tab title="Real-Time Monitoring">
+    Follow errors during development:
+    ```bash
+    bdg console --follow --level error
+    ```
+  </Tab>
+  
+  <Tab title="Correlation">
+    Combine with network debugging:
+    ```bash
+    bdg console --level error
+    bdg network list --preset errors
+    ```
+  </Tab>
+</Tabs>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Network Monitoring" icon="network-wired" href="/guides/network-monitoring">
+    Monitor and filter network requests
+  </Card>
+  
+  <Card title="DOM Inspection" icon="code" href="/guides/dom-inspection">
+    Query and inspect page elements
+  </Card>
+  
+  <Card title="API Reference" icon="book" href="/commands/console">
+    Complete console command reference
+  </Card>
+  
+  <Card title="Forms & Interaction" icon="hand-pointer" href="/guides/forms-and-interaction">
+    Interact with forms and elements
+  </Card>
+</CardGroup>

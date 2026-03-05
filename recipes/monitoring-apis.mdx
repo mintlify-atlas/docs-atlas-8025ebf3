@@ -1,0 +1,449 @@
+---
+title: "Monitoring API Calls"
+description: "Track XHR and Fetch requests, inspect headers, and export network data for API debugging"
+---
+
+Modern web applications make extensive API calls via XHR and Fetch. This recipe demonstrates how to use **bdg** to monitor, filter, and analyze API traffic in real-time.
+
+## Scenario
+
+You're investigating API behavior for a web application that:
+
+- Makes authenticated API calls to `https://api.example.com`
+- Uses JWT tokens for authentication
+- Implements retry logic for failed requests
+- Has CORS issues on some endpoints
+
+You need to monitor all API traffic, inspect request/response headers, and identify failing requests.
+
+## Workflow
+
+<Steps>
+  <Step title="Start session and navigate to the app">
+    Launch bdg and load the application. Network collection is enabled by default.
+
+    ```bash
+    bdg https://app.example.com/dashboard
+    ```
+
+    Wait for the session to start and the page to load.
+  </Step>
+
+  <Step title="Filter for API requests only">
+    Use the API preset to show only XHR and Fetch requests.
+
+    ```bash
+    # Show all API calls
+    bdg network list --preset api
+
+    # Or filter explicitly
+    bdg network list --type XHR,Fetch
+    ```
+
+    **Expected output:**
+    ```text
+    NETWORK REQUESTS (API only)
+
+    [0] GET /api/user → 200 OK (145ms)
+        Size: 1.2 KB | Type: Fetch
+
+    [1] GET /api/dashboard/stats → 200 OK (234ms)
+        Size: 3.4 KB | Type: XHR
+
+    [2] POST /api/events → 201 Created (89ms)
+        Size: 567 B | Type: Fetch
+    ```
+  </Step>
+
+  <Step title="Monitor API calls in real-time">
+    Stream network requests as they happen using follow mode.
+
+    ```bash
+    # Watch API calls live
+    bdg network list --preset api --follow
+    ```
+
+    Leave this running in one terminal while interacting with the app in another terminal or browser.
+  </Step>
+
+  <Step title="Find failing API requests">
+    Filter for error status codes to identify issues.
+
+    ```bash
+    # Show all 4xx and 5xx errors
+    bdg network list --filter "status-code:>=400"
+
+    # Show only 401 Unauthorized (auth issues)
+    bdg network list --filter "status-code:401"
+
+    # Show server errors only
+    bdg network list --filter "status-code:>=500"
+
+    # Combine with API filter
+    bdg network list --preset api --filter "status-code:>=400"
+    ```
+
+    **Expected output:**
+    ```text
+    NETWORK REQUESTS (errors)
+
+    [0] GET /api/protected/resource → 401 Unauthorized (67ms)
+        Size: 234 B | Type: Fetch
+
+    [1] POST /api/data/submit → 422 Unprocessable Entity (112ms)
+        Size: 456 B | Type: XHR
+    ```
+  </Step>
+
+  <Step title="Inspect authentication headers">
+    Check request and response headers for authentication issues.
+
+    ```bash
+    # Get request ID from the failed request
+    REQUEST_ID=$(bdg network list --filter "status-code:401" --json | jq -r '.data.requests[0].requestId')
+
+    # Inspect headers
+    bdg network headers $REQUEST_ID
+    ```
+
+    **Expected output:**
+    ```text
+    URL: https://api.example.com/protected/resource
+
+    Response Headers:
+    ─────────────────────────────────────────────────────
+    access-control-allow-origin: https://app.example.com
+    content-type: application/json
+    www-authenticate: Bearer realm="API"
+
+    Request Headers:
+    ─────────────────────────────────────────────────────
+    authorization: Bearer eyJhbGc...
+    content-type: application/json
+
+    Request ID: A1B2C3D4.567
+    ```
+
+    Check if the `authorization` header is present and properly formatted.
+  </Step>
+
+  <Step title="Filter API calls by domain">
+    If the app calls multiple APIs, filter by domain to focus on one.
+
+    ```bash
+    # Show only calls to main API
+    bdg network list --filter "domain:api.example.com"
+
+    # Exclude CDN requests
+    bdg network list --filter "!domain:cdn.*"
+
+    # Show calls to any subdomain
+    bdg network list --filter "domain:*.example.com"
+    ```
+  </Step>
+
+  <Step title="Inspect CORS headers">
+    Check CORS headers on failing cross-origin requests.
+
+    ```bash
+    # Find requests with CORS-related headers
+    bdg network list --filter "has-response-header:access-control-allow-origin"
+
+    # Inspect full CORS headers
+    bdg network headers $REQUEST_ID | grep -i "access-control"
+    ```
+
+    **Expected output:**
+    ```text
+    access-control-allow-credentials: true
+    access-control-allow-headers: Content-Type, Authorization
+    access-control-allow-methods: GET, POST, PUT, DELETE
+    access-control-allow-origin: https://app.example.com
+    ```
+
+    Common CORS issues:
+    - Missing `access-control-allow-origin` header
+    - Wildcard `*` origin with credentials
+    - Missing method in `access-control-allow-methods`
+  </Step>
+
+  <Step title="Track retry attempts">
+    If the app retries failed requests, identify the pattern.
+
+    ```bash
+    # Show duplicate requests to same URL
+    bdg network list --json | jq -r '[.data.requests[] | select(.url | contains("/api/retry-test"))] | group_by(.url) | .[] | {url: .[0].url, attempts: length, statuses: [.[].status]}'
+    ```
+
+    **Expected output:**
+    ```json
+    {
+      "url": "https://api.example.com/api/retry-test",
+      "attempts": 3,
+      "statuses": [500, 500, 200]
+    }
+    ```
+
+    This shows 2 failed attempts (500) followed by success (200).
+  </Step>
+
+  <Step title="Export API traffic as HAR file">
+    Export all network data for analysis in external tools.
+
+    ```bash
+    # Export while session is running
+    bdg network har api-debug-$(date +%Y%m%d-%H%M%S).har
+
+    # Or stop and export final state
+    bdg stop
+    bdg network har final-api-capture.har
+    ```
+
+    Import the HAR file into Chrome DevTools or online HAR viewers for detailed analysis.
+  </Step>
+
+  <Step title="Analyze request/response bodies">
+    Get full request and response details including bodies.
+
+    ```bash
+    # Get request ID for failed POST
+    REQUEST_ID=$(bdg network list --filter "method:POST status-code:422" --json | jq -r '.data.requests[0].requestId')
+
+    # View full details
+    bdg details network $REQUEST_ID
+    ```
+
+    **Expected output:**
+    ```json
+    {
+      "url": "https://api.example.com/api/data/submit",
+      "method": "POST",
+      "status": 422,
+      "requestHeaders": {
+        "content-type": "application/json"
+      },
+      "requestBody": {
+        "name": "",
+        "email": "invalid-email"
+      },
+      "responseBody": {
+        "errors": {
+          "name": "Name is required",
+          "email": "Invalid email format"
+        }
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+## Filtering Patterns
+
+### Find large API responses
+
+```bash
+# Show API calls returning more than 1MB
+bdg network list --preset api --filter "larger-than:1MB"
+```
+
+### Track authentication refresh flow
+
+```bash
+# Show token refresh requests
+bdg network list --filter "domain:api.* method:POST" --json | jq '[.data.requests[] | select(.url | contains("/auth/refresh"))]'
+```
+
+### Monitor WebSocket connections
+
+```bash
+# Show WebSocket handshakes
+bdg network list --filter "scheme:wss"
+```
+
+### Find cached vs fresh API calls
+
+```bash
+# Show cached responses
+bdg network list --preset cached
+
+# Show non-cached API calls
+bdg network list --preset api --filter "!is:from-cache"
+```
+
+## Common API Issues
+
+<AccordionGroup>
+  <Accordion title="401 Unauthorized - Expired JWT tokens">
+    **Symptom:** API calls fail with 401 after user has been idle.
+
+    **Investigation:**
+    ```bash
+    # Check authorization header
+    bdg network headers $REQUEST_ID | grep -i authorization
+
+    # Decode JWT (if not signed)
+    bdg network list --json | jq -r '.data.requests[0].requestHeaders.authorization' | sed 's/Bearer //' | cut -d'.' -f2 | base64 -d 2>/dev/null | jq '.exp'
+    ```
+
+    Compare `exp` (expiration) timestamp with current time.
+  </Accordion>
+
+  <Accordion title="429 Too Many Requests - Rate limiting">
+    **Symptom:** API calls fail after rapid requests.
+
+    **Investigation:**
+    ```bash
+    # Find rate limit headers
+    bdg network headers $REQUEST_ID | grep -i "rate-limit\|retry-after"
+
+    # Count requests in last minute
+    bdg network list --json | jq '[.data.requests[] | select(.wallTime > (now - 60))] | length'
+    ```
+  </Accordion>
+
+  <Accordion title="CORS preflight failures">
+    **Symptom:** OPTIONS requests fail before actual API call.
+
+    **Investigation:**
+    ```bash
+    # Show OPTIONS requests
+    bdg network list --filter "method:OPTIONS"
+
+    # Check if preflight succeeded
+    bdg network list --filter "method:OPTIONS status-code:>=400"
+
+    # Inspect CORS headers
+    bdg network headers $REQUEST_ID | grep -i "access-control"
+    ```
+  </Accordion>
+
+  <Accordion title="Slow API responses">
+    **Symptom:** API calls take too long.
+
+    **Investigation:**
+    ```bash
+    # Export HAR and analyze timing
+    bdg network har timing-analysis.har
+
+    # Extract timing data via JSON
+    bdg network list --json | jq '.data.requests[] | {url, duration: .timing.duration}' | sort -k2 -nr | head -10
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Advanced Techniques
+
+### Correlate API calls with user actions
+
+Run commands in sequence and track which API calls they trigger:
+
+```bash
+# Clear existing data
+bdg stop && bdg https://app.example.com
+
+# Perform action
+bdg dom click "#refresh-button"
+
+# Wait for network to settle
+sleep 2
+
+# Show API calls after action
+bdg network list --preset api --last 5
+```
+
+### Monitor API calls during form submission
+
+```bash
+# Fill form
+bdg dom fill "#username" "testuser"
+bdg dom fill "#password" "testpass"
+
+# Submit and watch network
+bdg dom submit "#login-form"
+
+# Check for auth API calls
+bdg network list --filter "domain:api.* method:POST" --last 3
+```
+
+### Export API call summary
+
+```bash
+bdg network list --preset api --json | jq '{
+  total: (.data.requests | length),
+  by_status: (.data.requests | group_by(.status) | map({status: .[0].status, count: length})),
+  by_method: (.data.requests | group_by(.method) | map({method: .[0].method, count: length}))
+}'
+```
+
+**Expected output:**
+```json
+{
+  "total": 24,
+  "by_status": [
+    {"status": 200, "count": 20},
+    {"status": 401, "count": 2},
+    {"status": 422, "count": 2}
+  ],
+  "by_method": [
+    {"method": "GET", "count": 18},
+    {"method": "POST", "count": 6}
+  ]
+}
+```
+
+## Automation Example
+
+Script to monitor API health:
+
+```bash
+#!/bin/bash
+# api-health-check.sh
+
+URL="https://app.example.com"
+THRESHOLD_4XX=5
+THRESHOLD_5XX=1
+
+echo "Starting API health check for $URL"
+bdg $URL
+
+# Wait for initial load
+sleep 5
+
+# Count errors
+ERRORS_4XX=$(bdg network list --filter "status-code:>=400 status-code:<500" --json | jq '.data.requests | length')
+ERRORS_5XX=$(bdg network list --filter "status-code:>=500" --json | jq '.data.requests | length')
+
+echo "4xx errors: $ERRORS_4XX (threshold: $THRESHOLD_4XX)"
+echo "5xx errors: $ERRORS_5XX (threshold: $THRESHOLD_5XX)"
+
+if [ $ERRORS_5XX -gt $THRESHOLD_5XX ]; then
+  echo "❌ CRITICAL: Too many 5xx errors"
+  bdg network list --filter "status-code:>=500"
+  exit 1
+elif [ $ERRORS_4XX -gt $THRESHOLD_4XX ]; then
+  echo "⚠️  WARNING: High rate of 4xx errors"
+  bdg network list --filter "status-code:>=400 status-code:<500"
+  exit 1
+else
+  echo "✓ API health check passed"
+fi
+
+bdg stop
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Network List Command" icon="list" href="/commands/network/list">
+    Learn all network filtering options
+  </Card>
+  <Card title="HAR Export" icon="file-export" href="/commands/network/har">
+    Export network data in HAR format
+  </Card>
+  <Card title="Headers Inspection" icon="heading" href="/commands/network/headers">
+    Inspect HTTP request/response headers
+  </Card>
+  <Card title="Debugging SPAs" icon="bug" href="/recipes/debugging-spa">
+    Correlate API calls with console errors
+  </Card>
+</CardGroup>

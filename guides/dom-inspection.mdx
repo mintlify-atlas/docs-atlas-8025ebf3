@@ -1,0 +1,352 @@
+---
+title: 'DOM Inspection'
+description: 'Query, inspect, and extract DOM elements with semantic accessibility output'
+---
+
+## Overview
+
+Browser Debugger CLI provides powerful DOM inspection capabilities that help you:
+
+- Query elements with CSS selectors
+- Extract semantic accessibility information
+- Get raw HTML when needed
+- Inspect element properties and context
+
+<Note>
+  By default, DOM commands return **semantic output** optimized for AI agents, reducing tokens by 70-99% compared to raw HTML.
+</Note>
+
+## Query Elements
+
+Find elements on the page and cache them for later use.
+
+### Basic Query
+
+```bash
+bdg dom query "button"
+```
+
+**Output:**
+```
+Found 3 elements matching "button"
+
+[0] button.submit-btn
+    "Submit Form"
+
+[1] button.cancel-btn
+    "Cancel"
+
+[2] button.reset-btn
+    "Reset"
+```
+
+Query results are automatically cached with 0-based indices. Use these indices with other DOM commands:
+
+```bash
+# Query elements first
+bdg dom query "input[type='text']"
+
+# Then reference by index
+bdg dom get 0
+bdg dom fill 0 "value"
+bdg dom click 1
+```
+
+### Complex Selectors
+
+```bash
+# Find by ID
+bdg dom query "#login-form"
+
+# Find by class
+bdg dom query ".error-message"
+
+# Complex selector
+bdg dom query "#login-form input[type='password']"
+
+# Attribute selectors
+bdg dom query "[data-test-id='submit-button']"
+```
+
+<Warning>
+  Attribute selectors with quotes can be tricky due to shell escaping. If you see "Element not found", try querying first then using the index.
+</Warning>
+
+## Get Element Details
+
+### Semantic Output (Default)
+
+The default semantic output provides accessibility information in a compact, token-efficient format:
+
+```bash
+bdg dom get "button[type='submit']"
+```
+
+**Output:**
+```
+[Button] "Submit Form" (focusable)
+```
+
+More examples:
+
+```bash
+bdg dom get "h1"
+# [Heading L1] "Welcome to Dashboard"
+
+bdg dom get "#searchInput"
+# [Searchbox] "Search" (focusable, required)
+
+bdg dom get ".nav-link"
+# [Link] "Home" (focusable)
+```
+
+<Tabs>
+  <Tab title="By Selector">
+    ```bash
+    bdg dom get "button.submit"
+    ```
+  </Tab>
+  <Tab title="By Index">
+    ```bash
+    # Query first
+    bdg dom query "button"
+    
+    # Get by index (0-based)
+    bdg dom get 0
+    ```
+  </Tab>
+</Tabs>
+
+### Raw HTML Output
+
+When you need the full HTML with all attributes:
+
+```bash
+bdg dom get "button" --raw
+```
+
+**Output:**
+```html
+<button type="submit" class="btn btn-primary" id="submit-btn" aria-label="Submit Form">
+  Submit Form
+</button>
+```
+
+### Get Multiple Elements
+
+```bash
+# Get all matching elements
+bdg dom get "button" --raw --all
+
+# Get specific element by position (1-based)
+bdg dom get "button" --raw --nth 2
+
+# Get by nodeId (from other commands)
+bdg dom get --raw --node-id 123
+```
+
+## Token Efficiency
+
+Semantic output dramatically reduces token usage:
+
+| Element Type | Raw HTML | Semantic | Reduction |
+|-------------|----------|----------|----------|
+| Simple button | 156 tokens | 12 tokens | 92% |
+| Form input | 89 tokens | 18 tokens | 80% |
+| Complex nav | 2,341 tokens | 234 tokens | 90% |
+
+<Note>
+  Semantic output includes role, accessible name, description, and key properties (focusable, required, disabled) while omitting implementation details.
+</Note>
+
+## Accessibility Tree Inspection
+
+Inspect the full accessibility tree exposed by Chrome DevTools Protocol:
+
+```bash
+# View full tree
+bdg dom a11y tree
+
+# Get JSON output
+bdg dom a11y tree --json
+```
+
+### Query Accessible Elements
+
+Find elements by their accessibility properties:
+
+```bash
+# Find all buttons
+bdg dom a11y query role=button
+
+# Find by accessible name
+bdg dom a11y query name="Submit"
+
+# Combine criteria (AND logic)
+bdg dom a11y query role=button,name="Submit"
+
+# Find by description
+bdg dom a11y query description="Click to submit"
+```
+
+**Query Pattern Syntax:**
+- `role=<value>` - Filter by ARIA role (case-insensitive)
+- `name=<value>` - Filter by accessible name
+- `description=<value>` - Filter by accessible description
+- Combine with commas for AND logic
+
+### Describe Specific Elements
+
+Get accessibility info for a specific element:
+
+```bash
+# By selector
+bdg dom a11y describe "button[type='submit']"
+
+# By ID
+bdg dom a11y describe "#login-form"
+
+# By index (from previous query)
+bdg dom query "button"
+bdg dom a11y describe 0
+```
+
+## Workflow Example
+
+<Steps>
+  <Step title="Query Elements">
+    Start by finding elements on the page:
+    ```bash
+    bdg dom query "form input"
+    ```
+    
+    Output shows all matching inputs with indices:
+    ```
+    Found 5 elements
+    [0] input#email
+    [1] input#password
+    [2] input#remember
+    [3] input#submit
+    [4] input#cancel
+    ```
+  </Step>
+  
+  <Step title="Inspect Individual Elements">
+    Get semantic information for specific elements:
+    ```bash
+    bdg dom get 0
+    # [Textbox] "Email address" (focusable, required)
+    
+    bdg dom get 1
+    # [Password] "Password" (focusable, required)
+    ```
+  </Step>
+  
+  <Step title="Get Raw HTML if Needed">
+    When you need full attributes and structure:
+    ```bash
+    bdg dom get 0 --raw
+    ```
+    
+    ```html
+    <input type="email" id="email" name="email" 
+           class="form-control" required 
+           aria-label="Email address">
+    ```
+  </Step>
+  
+  <Step title="Use with Other Commands">
+    Reference cached indices in other commands:
+    ```bash
+    bdg dom fill 0 "user@example.com"
+    bdg dom fill 1 "password123"
+    bdg dom click 3
+    ```
+  </Step>
+</Steps>
+
+## JSON Output
+
+All DOM commands support `--json` output for scripting:
+
+```bash
+bdg dom query "button" --json
+bdg dom get "h1" --json
+bdg dom a11y tree --json
+```
+
+### jq Integration
+
+```bash
+# Get first button
+bdg dom query "button" --json | jq '.nodes[0]'
+
+# Filter by class
+bdg dom query "button" --json | jq '.nodes[] | select(.classes[]? == "primary")'
+
+# Extract all node IDs
+bdg dom query "input" --json | jq '.nodes[].nodeId'
+```
+
+## JavaScript Evaluation
+
+Execute JavaScript directly in the page context:
+
+```bash
+# Get page title
+bdg dom eval "document.title"
+
+# Get element text content
+bdg dom eval 'document.querySelector("h1").textContent'
+
+# Get form values
+bdg dom eval '(() => {
+  const el = document.querySelector("input");
+  return el ? el.value : null;
+})()'
+```
+
+<Warning>
+  JavaScript expressions with quotes require careful escaping. Use single quotes around the script and double quotes inside, or vice versa.
+</Warning>
+
+### Shell Quote Handling
+
+```bash
+# Recommended: Single quotes outside, double quotes inside
+bdg dom eval 'document.querySelector("h1").textContent'
+
+# Alternative: Double quotes outside, single quotes inside
+bdg dom eval "document.querySelector('h1').textContent"
+
+# For complex scripts, use heredoc
+bdg dom eval "$(cat <<'EOF'
+(() => {
+  const el = document.querySelector("input");
+  return el ? el.value : null;
+})()  
+EOF
+)"
+```
+
+When errors occur, bdg shows the script as received to help diagnose shell escaping issues.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Forms & Interaction" icon="hand-pointer" href="/guides/forms-and-interaction">
+    Learn how to fill forms, click buttons, and interact with pages
+  </Card>
+  
+  <Card title="Screenshots" icon="camera" href="/guides/screenshots">
+    Capture page and element screenshots
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/commands/dom/query">
+    Complete DOM command reference
+  </Card>
+  
+  <Card title="Console Debugging" icon="terminal" href="/guides/console-debugging">
+    Inspect console messages and errors
+  </Card>
+</CardGroup>

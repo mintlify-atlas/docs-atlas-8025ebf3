@@ -1,0 +1,318 @@
+---
+title: "CDP Overview"
+description: "Execute and explore Chrome DevTools Protocol methods"
+---
+
+The `bdg cdp` command provides direct access to the Chrome DevTools Protocol (CDP), enabling you to execute any of the 300+ methods across 53 domains.
+
+## Quick Start
+
+```bash
+# List all available CDP domains
+bdg cdp --list
+
+# Search for methods by keyword
+bdg cdp --search cookie
+
+# Describe a method's parameters and return types
+bdg cdp Network.getCookies --describe
+
+# Execute a method
+bdg cdp Network.getCookies
+bdg cdp Runtime.evaluate --params '{"expression":"document.title"}'
+```
+
+## Syntax
+
+```bash
+bdg cdp [method] [options]
+```
+
+<ParamField path="method" type="string">
+  CDP method name in the format `Domain.method` (e.g., `Network.getCookies`, `Page.navigate`)
+  
+  **Case-insensitive**: `network.getcookies` works the same as `Network.getCookies`
+</ParamField>
+
+## Discovery Flags
+
+Before executing methods, use these flags to explore the available API surface.
+
+### List Domains
+
+```bash
+bdg cdp --list
+```
+
+Shows all 53 CDP domains with descriptions, command counts, and experimental status.
+
+**Example output:**
+```json
+{
+  "count": 53,
+  "domains": [
+    {
+      "name": "Network",
+      "description": "Network domain allows tracking network activities",
+      "commands": 48,
+      "events": 23,
+      "experimental": false
+    },
+    {
+      "name": "Page",
+      "description": "Actions and events related to the inspected page",
+      "commands": 42,
+      "events": 28,
+      "experimental": false
+    }
+  ]
+}
+```
+
+### List Domain Methods
+
+```bash
+bdg cdp Network --list
+bdg cdp Page --list
+```
+
+Shows all methods available in a specific domain.
+
+**Example output:**
+```json
+{
+  "domain": "Network",
+  "description": "Network domain allows tracking network activities",
+  "count": 48,
+  "methods": [
+    {
+      "name": "getCookies",
+      "fullName": "Network.getCookies",
+      "description": "Returns all browser cookies",
+      "parameterCount": 1,
+      "example": "bdg cdp Network.getCookies"
+    }
+  ]
+}
+```
+
+### Search Methods
+
+```bash
+bdg cdp --search cookie
+bdg cdp --search screenshot
+bdg cdp --search performance
+```
+
+Searches method names and descriptions for keywords.
+
+**Example output:**
+```json
+{
+  "query": "cookie",
+  "count": 5,
+  "methods": [
+    {
+      "name": "Network.getCookies",
+      "domain": "Network",
+      "method": "getCookies",
+      "description": "Returns all browser cookies",
+      "parameterCount": 1,
+      "example": "bdg cdp Network.getCookies"
+    },
+    {
+      "name": "Network.setCookie",
+      "domain": "Network",
+      "method": "setCookie",
+      "description": "Sets a cookie with the given cookie data",
+      "parameterCount": 1,
+      "example": "bdg cdp Network.setCookie --params '{...}'"
+    }
+  ]
+}
+```
+
+### Describe Method
+
+```bash
+bdg cdp Network.getCookies --describe
+bdg cdp Runtime.evaluate --describe
+```
+
+Shows complete method signature including:
+- Parameter names, types, and whether they're required
+- Return value types
+- Usage examples
+- Special behavior notes (for event-based methods)
+
+**Example output:**
+```json
+{
+  "type": "method",
+  "name": "Runtime.evaluate",
+  "domain": "Runtime",
+  "method": "evaluate",
+  "description": "Evaluates expression on global object",
+  "parameters": [
+    {
+      "name": "expression",
+      "type": "string",
+      "required": true,
+      "description": "Expression to evaluate"
+    },
+    {
+      "name": "returnByValue",
+      "type": "boolean",
+      "required": false,
+      "description": "Whether the result is expected to be a JSON object"
+    }
+  ],
+  "returns": [
+    {
+      "name": "result",
+      "type": "RemoteObject",
+      "optional": false,
+      "description": "Evaluation result"
+    }
+  ],
+  "example": {
+    "command": "bdg cdp Runtime.evaluate --params '{\"expression\":\"...\"}'",
+    "params": {
+      "expression": "..."
+    }
+  }
+}
+```
+
+## Execution
+
+### Simple Methods (No Parameters)
+
+```bash
+bdg cdp Network.getCookies
+bdg cdp Page.getNavigationHistory
+bdg cdp Runtime.getIsolateId
+```
+
+### Methods with Parameters
+
+Use `--params` with a JSON string:
+
+```bash
+bdg cdp Runtime.evaluate --params '{"expression":"document.title"}'
+bdg cdp Page.navigate --params '{"url":"https://example.com"}'
+bdg cdp DOM.querySelector --params '{"nodeId":1,"selector":"h1"}'
+```
+
+**Shell quoting tips:**
+- Use single quotes around the JSON string to avoid shell escaping issues
+- If the JSON contains single quotes, use double quotes outside and escape inner quotes
+
+### Error Handling
+
+If a method name is not found, bdg suggests similar methods:
+
+```bash
+$ bdg cdp Network.getCookie
+Error: Method 'Network.getCookie' not found
+
+Did you mean:
+  - Network.getCookies
+  - Network.setCookie
+  - Network.deleteCookies
+
+Use: bdg cdp Network --list (to see all Network methods)
+```
+
+## Options
+
+<ParamField path="--params" type="string">
+  Method parameters as a JSON string
+  
+  Example: `--params '{"expression":"document.title"}'`
+</ParamField>
+
+<ParamField path="--list" type="boolean">
+  List all domains (without method argument) or all methods in a domain (with domain argument)
+  
+  Examples:
+  - `bdg cdp --list` - List all domains
+  - `bdg cdp Network --list` - List all Network methods
+</ParamField>
+
+<ParamField path="--describe" type="boolean">
+  Show method signature, parameters, and return types
+  
+  Example: `bdg cdp Network.getCookies --describe`
+</ParamField>
+
+<ParamField path="--search" type="string">
+  Search methods by keyword
+  
+  Example: `bdg cdp --search cookie`
+</ParamField>
+
+## Event-Based Methods
+
+Some CDP methods trigger asynchronous operations where results arrive via events rather than immediate responses. When these methods return empty results, bdg provides contextual hints.
+
+**Example:**
+```bash
+$ bdg cdp Audits.checkContrast
+{
+  "method": "Audits.checkContrast",
+  "result": {},
+  "hint": "This method triggers contrast analysis but results are sent via Audits.issueAdded events. Alternative: bdg dom eval with getComputedStyle() for direct contrast checking."
+}
+```
+
+**Domains with event-based patterns:**
+
+| Domain | Behavior | Alternative |
+|--------|----------|-------------|
+| Audits | Issues via `Audits.issueAdded` events | `bdg dom eval` with `getComputedStyle()` |
+| Profiler | Data after `Profiler.stop` | Call start, perform actions, then stop |
+| HeapProfiler | Events after `takeHeapSnapshot` | Collect events or use snapshots |
+| Tracing | Data via `Tracing.dataCollected` | Call start, perform actions, then end |
+| Overlay | Visual only, returns empty | Use `Overlay.hideHighlight` to clear |
+
+Use `--describe` on these domains to see detailed notes about their behavior:
+
+```bash
+bdg cdp Audits --describe
+```
+
+## Blocked Methods
+
+Certain methods are blocked from direct execution because they return large binary data that can corrupt terminal sessions:
+
+- **Page.captureScreenshot** - Use `bdg dom screenshot` instead
+
+Attempting to call blocked methods will show an error with the recommended alternative:
+
+```bash
+$ bdg cdp Page.captureScreenshot
+Error: Page.captureScreenshot is blocked via raw CDP
+Reason: Returns large base64 data that corrupts terminal sessions
+Use: bdg dom screenshot [path]
+```
+
+## Exit Codes
+
+| Code | Meaning |
+|------|----------|
+| 0 | Success |
+| 81 | Invalid arguments (method not found, invalid JSON) |
+| 83 | Resource not found (domain not found) |
+| 102 | CDP timeout |
+
+## Related Commands
+
+- `bdg dom` - High-level DOM inspection and interaction
+- `bdg network` - Network request inspection
+- `bdg console` - Console message inspection
+
+## Learn More
+
+- [CDP Domains Reference](/commands/cdp/domains) - Major CDP domains and example methods
+- [Chrome DevTools Protocol Documentation](https://chromedevtools.github.io/devtools-protocol/) - Official CDP reference

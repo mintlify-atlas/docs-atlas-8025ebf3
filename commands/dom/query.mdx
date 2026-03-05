@@ -1,0 +1,149 @@
+---
+title: "bdg dom query"
+description: "Find elements by CSS selector and cache results for subsequent operations"
+---
+
+## Overview
+
+Query the DOM for elements matching a CSS selector. Results are cached for use with index-based operations in other commands (fill, click, get).
+
+## Syntax
+
+```bash
+bdg dom query <selector> [options]
+```
+
+## Arguments
+
+<ParamField path="selector" type="string" required>
+  CSS selector to match elements (e.g., `".error"`, `"#app"`, `"button"`)
+</ParamField>
+
+## Options
+
+<ParamField path="--json" type="flag">
+  Output results as JSON
+</ParamField>
+
+## Output
+
+Returns a compact summary with:
+- Total count of matched elements
+- Element preview with nodeId, tag, classes, and text
+- 0-based index for each element (use with other commands)
+
+### Human-readable format
+
+```bash
+$ bdg dom query "button"
+
+Found 3 elements matching "button":
+
+[0] <button.primary>   "Submit Form"
+[1] <button.secondary> "Cancel"
+[2] <button.link>      "Learn more"
+```
+
+### JSON format
+
+```json
+{
+  "version": "0.5.1",
+  "success": true,
+  "data": {
+    "selector": "button",
+    "count": 3,
+    "nodes": [
+      {
+        "index": 0,
+        "nodeId": 123,
+        "tag": "button",
+        "classes": ["primary"],
+        "preview": "Submit Form"
+      },
+      {
+        "index": 1,
+        "nodeId": 124,
+        "tag": "button",
+        "classes": ["secondary"],
+        "preview": "Cancel"
+      },
+      {
+        "index": 2,
+        "nodeId": 125,
+        "tag": "button",
+        "classes": ["link"],
+        "preview": "Learn more"
+      }
+    ]
+  }
+}
+```
+
+## Examples
+
+### Find all buttons
+
+```bash
+bdg dom query "button"
+```
+
+### Find elements by class
+
+```bash
+bdg dom query ".error-message"
+```
+
+### Find with complex selectors
+
+```bash
+bdg dom query "#login-form input[type='email']"
+```
+
+### Use cached results with other commands
+
+```bash
+# Step 1: Query to cache results
+bdg dom query "input"
+# Found 3 elements matching "input":
+# [0] <input.email>
+# [1] <input.password>
+# [2] <input.checkbox>
+
+# Step 2: Use index with other commands
+bdg dom fill 0 "user@example.com"
+bdg dom fill 1 "SecurePass123"
+bdg dom click 2
+```
+
+## Index-based operations
+
+Query results are cached for the current page navigation. Use the 0-based index from query results with:
+- `bdg dom get <index>` - Get element details
+- `bdg dom fill <index> <value>` - Fill form field
+- `bdg dom click <index>` - Click element
+- `bdg dom a11y describe <index>` - Get accessibility info
+
+<Warning>
+  Cached indices become invalid after page navigation. Re-run `query` after the page changes.
+</Warning>
+
+## Exit codes
+
+<ParamField path="0" type="number">
+  Success - elements found and cached
+</ParamField>
+
+<ParamField path="83" type="number">
+  RESOURCE_NOT_FOUND - no elements match the selector
+</ParamField>
+
+<ParamField path="102" type="number">
+  CDP_TIMEOUT - CDP operation timed out
+</ParamField>
+
+## Related commands
+
+- [`bdg dom get`](/commands/dom/get) - Get element details using cached index
+- [`bdg dom fill`](/commands/dom/fill) - Fill form field using cached index
+- [`bdg dom click`](/commands/dom/click) - Click element using cached index

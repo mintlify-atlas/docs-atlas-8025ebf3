@@ -1,0 +1,313 @@
+---
+title: 'bdg peek'
+description: 'Preview collected data without stopping the session'
+---
+
+## Overview
+
+Preview session data in real-time without stopping the active session. Shows the last N network requests and console messages with optional filtering.
+
+## Syntax
+
+```bash
+bdg peek [options]
+```
+
+## Options
+
+<ParamField path="--last" type="number" default="10">
+  Number of items to show. Valid range: 1-1000.
+  
+  ```bash
+  bdg peek --last 50
+  ```
+</ParamField>
+
+<ParamField path="--type" type="string">
+  Filter network requests by resource type (comma-separated, case-insensitive).
+  
+  Valid types: `Document`, `Stylesheet`, `Image`, `Media`, `Font`, `Script`, `TextTrack`, `XHR`, `Fetch`, `Prefetch`, `EventSource`, `WebSocket`, `Manifest`, `SignedExchange`, `Ping`, `CSPViolationReport`, `Preflight`, `FedCM`, `Other`
+  
+  ```bash
+  bdg peek --type Document
+  bdg peek --type XHR,Fetch
+  bdg peek --type Script --last 100
+  ```
+</ParamField>
+
+<ParamField path="--network" type="boolean" default="false">
+  Show only network requests.
+  
+  ```bash
+  bdg peek --network
+  ```
+  
+  <Note>Deprecated in human-readable mode. Use `bdg network list` for enhanced filtering.</Note>
+</ParamField>
+
+<ParamField path="--console" type="boolean" default="false">
+  Show only console messages.
+  
+  ```bash
+  bdg peek --console
+  ```
+</ParamField>
+
+<ParamField path="--dom" type="boolean" default="false">
+  Show DOM/A11y tree data (only available after session stops).
+  
+  ```bash
+  bdg peek --dom
+  ```
+  
+  <Info>DOM data is captured as a snapshot when the session ends. During a live session, this will show "(none)".</Info>
+</ParamField>
+
+<ParamField path="--verbose" type="boolean" default="false">
+  Use verbose output with full URLs and resource type information.
+  
+  ```bash
+  bdg peek --verbose
+  bdg peek -v --last 20
+  ```
+</ParamField>
+
+<ParamField path="--follow" type="boolean" default="false">
+  Watch for updates continuously (like `tail -f`). Updates every second.
+  
+  ```bash
+  bdg peek --follow
+  bdg peek -f --type XHR,Fetch
+  ```
+  
+  Press `Ctrl+C` to stop following.
+</ParamField>
+
+<ParamField path="--json" type="boolean" default="false">
+  Output as JSON instead of human-readable format.
+  
+  ```bash
+  bdg peek --json
+  bdg peek --json | jq '.data.preview.data.network[0]'
+  ```
+</ParamField>
+
+## Output Format
+
+### Human-Readable (Default)
+
+**Compact format** (default):
+```text
+NETWORK (3)
+  DOC  200  https://example.com/
+  XHR  200  /api/users
+  SCR  200  /bundle.js
+
+CONSOLE (2)
+  [log]    User logged in
+  [error]  Failed to load resource
+
+Tip: Use --verbose for full URLs and resource types
+```
+
+**Verbose format** (`--verbose`):
+```text
+NETWORK REQUESTS (3)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  [Document]   200  https://example.com/
+  [XHR]        200  https://example.com/api/users
+  [Script]     200  https://example.com/bundle.js
+
+CONSOLE MESSAGES (2)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  [log]    User logged in
+  [error]  Failed to load resource
+```
+
+### JSON Format
+
+Returns the complete session data structure:
+
+```json
+{
+  "version": "0.5.1",
+  "success": true,
+  "timestamp": "2025-11-06T12:00:00.000Z",
+  "duration": 45230,
+  "target": {
+    "url": "http://localhost:3000",
+    "title": "Example Page"
+  },
+  "data": {
+    "preview": {
+      "data": {
+        "network": [
+          {
+            "requestId": "1234.1",
+            "url": "https://example.com/",
+            "method": "GET",
+            "status": 200,
+            "resourceType": "Document",
+            "mimeType": "text/html"
+          }
+        ],
+        "console": [
+          {
+            "type": "log",
+            "text": "User logged in",
+            "timestamp": 1699272000000,
+            "args": []
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
+## Examples
+
+### Basic Usage
+
+Preview last 10 items (default):
+```bash
+bdg peek
+```
+
+Show last 50 items:
+```bash
+bdg peek --last 50
+```
+
+### Filter by Data Type
+
+Show only network requests:
+```bash
+bdg peek --network
+```
+
+Show only console messages:
+```bash
+bdg peek --console
+```
+
+### Filter by Resource Type
+
+Show only Document requests (HTML pages):
+```bash
+bdg peek --type Document
+```
+
+Show API requests (XHR and Fetch):
+```bash
+bdg peek --type XHR,Fetch
+```
+
+Show scripts and stylesheets:
+```bash
+bdg peek --type Script,Stylesheet --last 100
+```
+
+### Follow Mode
+
+Watch for updates in real-time:
+```bash
+bdg peek --follow
+```
+
+Follow specific resource types:
+```bash
+bdg peek --follow --type XHR,Fetch
+```
+
+Follow with verbose output:
+```bash
+bdg peek --follow --verbose
+```
+
+### JSON Output
+
+Get JSON output for processing:
+```bash
+bdg peek --json
+```
+
+Extract specific fields with `jq`:
+```bash
+# Get all request URLs
+bdg peek --json | jq -r '.data.preview.data.network[].url'
+
+# Filter 404 errors
+bdg peek --json | jq '.data.preview.data.network[] | select(.status == 404)'
+
+# Count console errors
+bdg peek --json | jq '[.data.preview.data.console[] | select(.type == "error")] | length'
+```
+
+## Resource Type Filtering
+
+The `--type` flag filters network requests by Chrome DevTools Protocol resource type:
+
+| Type | Description | Example URLs |
+|------|-------------|-------------|
+| `Document` | HTML pages | `/`, `/about`, `/products` |
+| `Stylesheet` | CSS files | `/styles.css`, `/theme.css` |
+| `Script` | JavaScript files | `/bundle.js`, `/app.js` |
+| `XHR` | XMLHttpRequest | API calls via XHR |
+| `Fetch` | Fetch API | API calls via fetch() |
+| `Image` | Images | `/logo.png`, `/photo.jpg` |
+| `Font` | Web fonts | `/font.woff2`, `/icons.ttf` |
+| `Media` | Audio/video | `/video.mp4`, `/audio.mp3` |
+| `WebSocket` | WebSocket connections | `wss://api.example.com` |
+
+<Note>
+  Resource types are case-insensitive. Both `--type xhr` and `--type XHR` work.
+</Note>
+
+## Exit Codes
+
+<ParamField path="0" type="SUCCESS">
+  Command completed successfully.
+</ParamField>
+
+<ParamField path="81" type="INVALID_ARGUMENTS">
+  Invalid option value (e.g., `--last 2000` exceeds max of 1000).
+  
+  **Common causes:**
+  - `--last` value outside range 1-1000
+  - Invalid resource type in `--type`
+  - Conflicting options
+</ParamField>
+
+<ParamField path="83" type="RESOURCE_NOT_FOUND">
+  No active session found.
+  
+  **Solution:** Start a session first with `bdg <url>`
+</ParamField>
+
+<ParamField path="101" type="CDP_CONNECTION_FAILURE">
+  Cannot connect to daemon.
+  
+  **Solution:** Check session status with `bdg status`
+</ParamField>
+
+## Related Commands
+
+- [`bdg tail`](/commands/tail) - Continuous monitoring (dedicated tail command)
+- [`bdg details`](/commands/details) - Get detailed information for specific items
+- [`bdg network list`](/commands/network/list) - Enhanced network request filtering
+- [`bdg console`](/commands/console) - Smart console message inspection
+
+## Tips
+
+<Tip>
+  Use `bdg peek --follow --type XHR,Fetch` to watch API calls in real-time during development.
+</Tip>
+
+<Tip>
+  Combine `--verbose` with `--type Document` to debug CSP headers: `bdg peek --verbose --type Document`
+</Tip>
+
+<Warning>
+  The `--last` validation limit of 1000 prevents excessive memory usage. For larger datasets, use `bdg stop` to write the full session to `~/.bdg/session.json`.
+</Warning>

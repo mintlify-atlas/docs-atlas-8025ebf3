@@ -1,0 +1,294 @@
+---
+title: "network headers"
+description: "Show HTTP headers for network requests"
+---
+
+## Synopsis
+
+Display HTTP request and response headers for a specific network request or the main document.
+
+```bash
+bdg network headers [id] [options]
+```
+
+## Description
+
+The `network headers` command displays both request and response HTTP headers for a specific network request.
+
+Without a request ID, shows headers for the **current main document** (the HTML page). If the page has navigated since the session started, this will be the latest navigation, not the original URL.
+
+Use request IDs from `bdg network list` or `bdg peek --network` output to inspect specific requests.
+
+## Arguments
+
+<ParamField path="id" type="string" optional>
+  Request ID from `network list` or `peek --network` output.
+  
+  If omitted, displays headers for the current main HTML document.
+</ParamField>
+
+## Options
+
+<ParamField path="--header" type="string">
+  Filter to a specific header name (case-insensitive). Shows only this header from both request and response.
+  
+  **Example:** `--header content-type`
+</ParamField>
+
+<ParamField path="--json" type="flag">
+  Output results in JSON format for programmatic consumption.
+</ParamField>
+
+## Output Format
+
+### Human-readable (default)
+
+```
+Network Request Headers
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+URL:  https://example.com/api/users
+
+Response Headers:
+  cache-control:        max-age=3600, public
+  content-encoding:     gzip
+  content-type:         application/json; charset=utf-8
+  date:                 Thu, 05 Mar 2026 14:30:22 GMT
+  etag:                 "abc123"
+  server:               nginx/1.21.0
+  set-cookie:           session=xyz; HttpOnly; Secure
+  x-cache:              HIT
+  x-ratelimit-limit:    1000
+  x-ratelimit-remaining: 999
+
+Request Headers:
+  accept:               application/json
+  accept-encoding:      gzip, deflate, br
+  authorization:        Bearer eyJ...
+  cache-control:        no-cache
+  user-agent:           Mozilla/5.0 ...
+  x-request-id:         req-12345
+
+Request ID: 004
+```
+
+### Filtered to specific header
+
+```bash
+bdg network headers 004 --header content-type
+```
+
+```
+Network Request Headers
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+URL:  https://example.com/api/users
+
+Response Headers:
+  content-type: application/json; charset=utf-8
+
+Request Headers:
+
+Request ID: 004
+```
+
+### JSON Format
+
+```json
+{
+  "version": "1.2.3",
+  "success": true,
+  "data": {
+    "url": "https://example.com/api/users",
+    "requestId": "004",
+    "requestHeaders": {
+      "accept": "application/json",
+      "accept-encoding": "gzip, deflate, br",
+      "authorization": "Bearer eyJ...",
+      "cache-control": "no-cache",
+      "user-agent": "Mozilla/5.0 ...",
+      "x-request-id": "req-12345"
+    },
+    "responseHeaders": {
+      "cache-control": "max-age=3600, public",
+      "content-encoding": "gzip",
+      "content-type": "application/json; charset=utf-8",
+      "date": "Thu, 05 Mar 2026 14:30:22 GMT",
+      "etag": "\"abc123\"",
+      "server": "nginx/1.21.0",
+      "set-cookie": "session=xyz; HttpOnly; Secure",
+      "x-cache": "HIT",
+      "x-ratelimit-limit": "1000",
+      "x-ratelimit-remaining": "999"
+    }
+  }
+}
+```
+
+## Examples
+
+### Show main document headers
+
+```bash
+bdg network headers
+```
+
+### Show headers for specific request
+
+```bash
+# Get request ID from list
+bdg network list --filter "domain:api.*"
+# Then inspect headers
+bdg network headers 004
+```
+
+### Filter to specific header
+
+```bash
+bdg network headers 004 --header content-type
+```
+
+### Check authorization header
+
+```bash
+bdg network headers 004 --header authorization
+```
+
+### Inspect caching headers
+
+```bash
+bdg network headers 004 --header cache-control
+```
+
+### Get headers as JSON and parse
+
+```bash
+bdg network headers 004 --json | jq '.data.responseHeaders."content-type"'
+```
+
+### Check rate limit headers
+
+```bash
+bdg network headers 004 --json | jq '.data.responseHeaders | {limit: ."x-ratelimit-limit", remaining: ."x-ratelimit-remaining"}'
+```
+
+### Extract all Set-Cookie headers
+
+```bash
+bdg network headers --header set-cookie
+```
+
+## Use Cases
+
+### Debug CORS issues
+
+```bash
+# Check CORS headers on API request
+bdg network list --filter "domain:api.*"
+bdg network headers 004 --header access-control-allow-origin
+```
+
+### Verify authentication
+
+```bash
+# Check if Authorization header is being sent
+bdg network headers 004 --header authorization
+```
+
+### Inspect caching behavior
+
+```bash
+# Check cache-related headers
+bdg network headers 004 --json | jq '.data.responseHeaders | {"cache-control", "etag", "x-cache"}'
+```
+
+### Monitor rate limits
+
+```bash
+# Extract rate limit info
+bdg network headers 004 --json | jq -r '.data.responseHeaders | "Limit: \(."x-ratelimit-limit"), Remaining: \(."x-ratelimit-remaining")"'
+```
+
+### Check compression
+
+```bash
+# Verify content-encoding
+bdg network headers --header content-encoding
+```
+
+### Security audit
+
+```bash
+# Check security headers
+bdg network headers --json | jq '.data.responseHeaders | {"strict-transport-security", "content-security-policy", "x-frame-options"}'
+```
+
+## Exit Codes
+
+<ResponseField name="0" type="SUCCESS">
+  Headers retrieved successfully
+</ResponseField>
+
+<ResponseField name="83" type="RESOURCE_NOT_FOUND">
+  Request ID not found, or no network requests captured yet
+</ResponseField>
+
+<ResponseField name="101" type="CDP_CONNECTION_FAILURE">
+  Failed to connect to daemon
+</ResponseField>
+
+## Companion Commands
+
+### network document
+
+Alias for `network headers` without an ID - shows main document headers:
+
+```bash
+bdg network document [--header <name>] [--json]
+```
+
+Equivalent to:
+
+```bash
+bdg network headers [--header <name>] [--json]
+```
+
+## Tips
+
+<Tip>
+  **Find Request IDs**: Use `bdg network list` to find request IDs:
+  ```bash
+  bdg network list --filter "domain:api.*"
+  # [004]  200 GET  XHR    2.1 KB  https://api.example.com/users
+  bdg network headers 004
+  ```
+</Tip>
+
+<Tip>
+  **Main Document**: Without an ID, `network headers` shows the current main document. If the page navigated, this is the latest navigation:
+  ```bash
+  bdg example.com        # Start session
+  # ... page redirects to example.com/login
+  bdg network headers    # Shows headers for /login (current page)
+  ```
+</Tip>
+
+<Tip>
+  **Case-Insensitive Filtering**: The `--header` option is case-insensitive:
+  ```bash
+  bdg network headers --header CONTENT-TYPE
+  bdg network headers --header content-type
+  # Both work identically
+  ```
+</Tip>
+
+<Warning>
+  Request headers may contain sensitive data like authorization tokens. Be careful when logging or sharing output.
+</Warning>
+
+## See Also
+
+- [network list](/commands/network/list) - List network requests to find IDs
+- [network getCookies](/commands/network/cookies) - List cookies (alternative to Set-Cookie header)
+- [peek](/commands/peek) - Quick session overview including recent requests
+- [details](/commands/details) - Get full details for a network request

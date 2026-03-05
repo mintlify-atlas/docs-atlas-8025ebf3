@@ -1,0 +1,245 @@
+---
+title: "bdg dom scroll"
+description: "Scroll page to elements, by pixels, or to boundaries"
+---
+
+## Overview
+
+Scroll the page to specific elements, by pixel offsets, or to page boundaries. Automatically waits for lazy-loaded content and DOM mutations to stabilize.
+
+## Syntax
+
+```bash
+bdg dom scroll [selector] [options]
+```
+
+## Arguments
+
+<ParamField path="selector" type="string" optional>
+  CSS selector or numeric index from cached query results (0-based)
+</ParamField>
+
+## Options
+
+<ParamField path="--index" type="number">
+  Element index if selector matches multiple (0-based)
+</ParamField>
+
+<ParamField path="--down" type="number">
+  Scroll down by pixels
+</ParamField>
+
+<ParamField path="--up" type="number">
+  Scroll up by pixels
+</ParamField>
+
+<ParamField path="--left" type="number">
+  Scroll left by pixels
+</ParamField>
+
+<ParamField path="--right" type="number">
+  Scroll right by pixels
+</ParamField>
+
+<ParamField path="--top" type="flag">
+  Scroll to page top
+</ParamField>
+
+<ParamField path="--bottom" type="flag">
+  Scroll to page bottom
+</ParamField>
+
+<ParamField path="--no-wait" type="flag">
+  Skip waiting for lazy-loaded content after scroll
+</ParamField>
+
+<ParamField path="--json" type="flag">
+  Output as JSON
+</ParamField>
+
+## Behavior
+
+### Element scrolling
+
+When a selector is provided:
+- Scrolls element into view (centered vertically)
+- Uses instant scrolling (no smooth animation)
+- Returns original scroll position for restoration
+
+### Post-scroll stability
+
+By default, waits for content to stabilize:
+- Network idle (no requests for 150ms)
+- DOM stable (no mutations for 200ms)
+- Maximum wait: 2 seconds
+
+Detects lazy-loaded images, infinite scroll, and dynamic content.
+
+## Examples
+
+### Scroll to element
+
+```bash
+# By selector
+bdg dom scroll "footer"
+bdg dom scroll "#section-2"
+bdg dom scroll ".product-card"
+
+# By cached index
+bdg dom query ".nav-link"
+bdg dom scroll 2
+```
+
+### Scroll by pixels
+
+```bash
+# Scroll down
+bdg dom scroll --down 500
+
+# Scroll up
+bdg dom scroll --up 300
+
+# Scroll horizontally
+bdg dom scroll --right 200
+bdg dom scroll --left 100
+```
+
+### Scroll to boundaries
+
+```bash
+# Top of page
+bdg dom scroll --top
+
+# Bottom of page
+bdg dom scroll --bottom
+```
+
+### Skip waiting
+
+```bash
+# For pages without lazy loading
+bdg dom scroll "footer" --no-wait
+```
+
+## Common workflows
+
+### Load more content
+
+```bash
+# Scroll to bottom to trigger infinite scroll
+bdg dom scroll --bottom
+# Waits for new content to load
+
+# Verify new content loaded
+bdg dom query ".product-card"
+```
+
+### Navigate to section
+
+```bash
+# Query sections
+bdg dom query "section"
+# [0] <section#intro>
+# [1] <section#features>
+# [2] <section#pricing>
+
+# Scroll to pricing section
+bdg dom scroll 2
+```
+
+### Screenshot visible area
+
+```bash
+# Scroll element into view before screenshot
+bdg dom screenshot footer.png --scroll "footer"
+
+# Or manually
+bdg dom scroll "#chart"
+bdg dom screenshot chart.png --no-full-page
+```
+
+## Scroll modes
+
+### Element-based (with selector)
+
+```bash
+bdg dom scroll "#element"
+```
+
+- Centers element vertically in viewport
+- Waits for lazy-loaded content by default
+- Returns original scroll position
+
+### Relative (with pixel offsets)
+
+```bash
+bdg dom scroll --down 500 --right 100
+```
+
+- Scrolls relative to current position
+- Can combine vertical and horizontal
+- No element targeting
+
+### Absolute (with boundaries)
+
+```bash
+bdg dom scroll --bottom
+```
+
+- Scrolls to fixed position
+- `--top` goes to (0, 0)
+- `--bottom` goes to maximum scroll height
+
+## Exit codes
+
+<ParamField path="0" type="number">
+  Success - scrolled to target
+</ParamField>
+
+<ParamField path="81" type="number">
+  INVALID_ARGUMENTS - invalid pixel value or conflicting options
+</ParamField>
+
+<ParamField path="83" type="number">
+  RESOURCE_NOT_FOUND - element not found
+</ParamField>
+
+<ParamField path="87" type="number">
+  STALE_CACHE - cached index invalid (page navigation)
+</ParamField>
+
+<ParamField path="102" type="number">
+  CDP_TIMEOUT - CDP operation timed out
+</ParamField>
+
+## Lazy loading detection
+
+The scroll command detects lazy-loaded content through:
+
+1. **Network activity**: Monitors resource requests via Performance Observer
+2. **DOM mutations**: Tracks element additions and changes via MutationObserver
+3. **Stability thresholds**: Waits until both network and DOM are idle
+
+This ensures screenshots and subsequent operations capture fully loaded content.
+
+## Troubleshooting
+
+### Content not loading
+
+If lazy content doesn't load after scroll:
+1. Verify the page uses scroll-triggered loading
+2. Check scroll reached the trigger point: `bdg dom eval 'window.scrollY'`
+3. Increase wait time manually: `bdg dom scroll --bottom && sleep 2`
+
+### Scroll position wrong
+
+For elements not centered correctly:
+1. Check element is visible: `bdg dom get <selector>`
+2. Verify element has dimensions: `bdg dom get <selector> --raw`
+3. Try scrolling by pixels instead: `bdg dom scroll --down 500`
+
+## Related commands
+
+- [`bdg dom screenshot`](/commands/dom/screenshot) - Capture screenshots with `--scroll` option
+- [`bdg dom query`](/commands/dom/query) - Find elements to scroll to
+- [`bdg dom eval`](/commands/dom/eval) - Check scroll position programmatically

@@ -1,0 +1,487 @@
+---
+title: 'Screenshots'
+description: 'Capture full page and element screenshots optimized for AI vision models'
+---
+
+## Overview
+
+Browser Debugger CLI provides intelligent screenshot capabilities:
+
+- Full page or viewport capture
+- Element-specific screenshots
+- Auto-resize for Claude Vision optimization (~1,600 tokens)
+- Tall page detection and handling
+- Scroll-to-element capture
+- Continuous capture mode
+- PNG and JPEG formats
+
+<Note>
+  Screenshots are automatically resized to fit within Claude Vision's optimal token budget (1568px max edge) unless `--no-resize` is specified.
+</Note>
+
+## Basic Page Screenshot
+
+```bash
+# Capture full page (auto-resized for Claude Vision)
+bdg dom screenshot output.png
+
+# Capture viewport only
+bdg dom screenshot visible.jpg --no-full-page
+
+# Full resolution (disable auto-resize)
+bdg dom screenshot full-res.png --no-resize
+```
+
+<Tabs>
+  <Tab title="Full Page">
+    ```bash
+    bdg dom screenshot page.png
+    ```
+    Captures entire page with auto-resize enabled.
+  </Tab>
+  <Tab title="Viewport">
+    ```bash
+    bdg dom screenshot viewport.png --no-full-page
+    ```
+    Captures visible area only.
+  </Tab>
+  <Tab title="Full Resolution">
+    ```bash
+    bdg dom screenshot hi-res.png --no-resize
+    ```
+    Disables auto-resize for maximum quality.
+  </Tab>
+</Tabs>
+
+## Image Formats
+
+### PNG (Default)
+
+Lossless compression, best for UI screenshots:
+
+```bash
+bdg dom screenshot page.png
+```
+
+### JPEG
+
+Smaller file size, adjustable quality:
+
+```bash
+# Default JPEG quality (90)
+bdg dom screenshot page.jpg --format jpeg
+
+# Maximum quality
+bdg dom screenshot page.jpg --format jpeg --quality 100
+
+# Lower quality for smaller files
+bdg dom screenshot page.jpg --format jpeg --quality 70
+```
+
+<Warning>
+  JPEG is lossy compression. Use PNG for screenshots with text or UI elements that need to be sharp.
+</Warning>
+
+## Element Screenshots
+
+Capture specific elements on the page:
+
+```bash
+# By selector
+bdg dom screenshot element.png --selector "#header"
+
+# By index from previous query
+bdg dom query "button"
+bdg dom screenshot button.png --index 0
+
+# Element with custom format
+bdg dom screenshot widget.jpg --selector ".widget" --format jpeg --quality 90
+```
+
+<Steps>
+  <Step title="Query Element">
+    ```bash
+    bdg dom query ".hero-section"
+    ```
+    Output shows index: `[0] div.hero-section`
+  </Step>
+  
+  <Step title="Capture Element">
+    ```bash
+    bdg dom screenshot hero.png --index 0
+    ```
+  </Step>
+</Steps>
+
+## Scroll and Capture
+
+Scroll to an element before capturing:
+
+```bash
+# Scroll to footer and capture viewport
+bdg dom screenshot footer.png --scroll "footer"
+
+# Scroll to element and capture it specifically
+bdg dom screenshot pricing.png --scroll "#pricing" --selector "#pricing"
+
+# Scroll to element in list
+bdg dom screenshot item.png --scroll ".item" --index 5
+```
+
+<Note>
+  When using `--scroll`, the command automatically waits for lazy-loaded content to stabilize before capturing.
+</Note>
+
+## Auto-Resize Behavior
+
+Screenshots are automatically optimized for Claude Vision:
+
+### Resize Thresholds
+
+- **Max edge**: 1568px (Claude Vision optimal)
+- **Target tokens**: ~1,600 tokens
+- **Tall pages**: Aspect ratio > 3:1 automatically captures viewport only
+
+### Examples
+
+| Original Size | Resized To | Tokens | Reduction |
+|--------------|-----------|--------|----------|
+| 1920x1080 | 1568x882 | 1,383 | 23% |
+| 2560x1440 | 1568x882 | 1,383 | 38% |
+| 3840x2160 | 1568x882 | 1,383 | 59% |
+| 1200x8000 | viewport | 1,536 | 94% (tall page) |
+
+### Device Pixel Ratio
+
+Retina displays (DPR > 1) are automatically handled:
+
+```bash
+# On Retina display (DPR 2.0)
+bdg dom screenshot page.png
+
+# Automatically sets DPR to 1 before capture
+# Result: 1568px max edge, ~1,600 tokens
+```
+
+## Tall Page Handling
+
+Pages with aspect ratio > 3:1 automatically capture viewport only:
+
+```bash
+bdg dom screenshot long-page.png
+```
+
+**Output:**
+```json
+{
+  "path": "/path/to/long-page.png",
+  "captureMode": "viewport",
+  "fullPageSkipped": {
+    "reason": "page_too_tall",
+    "originalHeight": 8000,
+    "aspectRatio": 6.7
+  },
+  "warning": "Full page capture skipped: page too tall (6.7:1 aspect ratio). Only viewport captured."
+}
+```
+
+<Warning>
+  Tall pages would exceed token limits if captured in full. Use `--scroll` to capture specific sections.
+</Warning>
+
+## Continuous Capture Mode
+
+Capture screenshots at regular intervals:
+
+```bash
+# Capture to directory every second
+bdg dom screenshot ./frames --follow
+
+# Custom interval (every 2 seconds)
+bdg dom screenshot ./frames --follow --interval 2000
+
+# Limit number of frames
+bdg dom screenshot ./frames --follow --limit 10
+
+# JPEG format
+bdg dom screenshot ./frames --follow --format jpeg
+```
+
+**Output:**
+```
+Capturing to ./frames every 1000ms...
+Frame 1: 001.png
+Frame 2: 002.png
+Frame 3: 003.png
+...
+^C
+Captured 15 frames
+```
+
+<Note>
+  Press Ctrl+C to stop continuous capture.
+</Note>
+
+### Use Cases
+
+- Recording animations
+- Monitoring page changes
+- Creating time-lapses
+- Debugging loading states
+
+## Screenshot Metadata
+
+All screenshots return detailed metadata:
+
+```bash
+bdg dom screenshot page.png --json
+```
+
+**Output:**
+```json
+{
+  "version": "0.5.1",
+  "success": true,
+  "data": {
+    "path": "/absolute/path/to/page.png",
+    "format": "png",
+    "width": 1568,
+    "height": 882,
+    "size": 245678,
+    "fullPage": true,
+    "captureMode": "full_page",
+    "finalTokens": 1383,
+    "resized": true,
+    "originalWidth": 1920,
+    "originalHeight": 1080,
+    "originalTokens": 2073
+  }
+}
+```
+
+### Metadata Fields
+
+| Field | Description |
+|-------|-------------|
+| `path` | Absolute path to saved file |
+| `format` | Image format (png/jpeg) |
+| `width` | Final image width (px) |
+| `height` | Final image height (px) |
+| `size` | File size (bytes) |
+| `fullPage` | Whether full page was captured |
+| `captureMode` | `full_page` or `viewport` |
+| `finalTokens` | Estimated Claude Vision tokens |
+| `resized` | Whether auto-resize was applied |
+| `originalWidth` | Width before resize (if resized) |
+| `originalHeight` | Height before resize (if resized) |
+| `originalTokens` | Tokens before resize (if resized) |
+
+## Workflow Examples
+
+### Capture Page States
+
+<Steps>
+  <Step title="Initial State">
+    ```bash
+    bdg dom screenshot 1-initial.png
+    ```
+  </Step>
+  
+  <Step title="After Interaction">
+    ```bash
+    bdg dom fill "#email" "user@example.com"
+    bdg dom screenshot 2-filled.png
+    ```
+  </Step>
+  
+  <Step title="After Submission">
+    ```bash
+    bdg dom click "#submit"
+    bdg dom screenshot 3-submitted.png
+    ```
+  </Step>
+  
+  <Step title="Error State">
+    ```bash
+    bdg console --level error
+    bdg dom screenshot 4-error.png
+    ```
+  </Step>
+</Steps>
+
+### Compare Sections
+
+```bash
+# Header
+bdg dom screenshot header.png --selector "header"
+
+# Main content
+bdg dom screenshot main.png --selector "main"
+
+# Footer
+bdg dom screenshot footer.png --scroll "footer" --selector "footer"
+```
+
+### Record Interaction
+
+```bash
+# Start continuous capture
+bdg dom screenshot ./recording --follow --interval 500 &
+CAPTURE_PID=$!
+
+# Perform interactions
+bdg dom fill "#search" "query"
+bdg dom click "#submit"
+
+# Stop capture
+kill $CAPTURE_PID
+
+# Review frames
+ls -l ./recording/
+```
+
+### Mobile Viewport
+
+```bash
+# Capture viewport (typical mobile view)
+bdg dom screenshot mobile.png --no-full-page
+
+# Specific elements
+bdg dom screenshot nav.png --selector "nav"
+bdg dom screenshot content.png --selector "main"
+```
+
+## Token Optimization
+
+Optimize screenshots for AI vision models:
+
+### When to Disable Auto-Resize
+
+```bash
+# Need full quality for OCR
+bdg dom screenshot text.png --no-resize
+
+# Small elements already under threshold
+bdg dom screenshot icon.png --selector ".icon" --no-resize
+
+# Archival purposes
+bdg dom screenshot archive.png --no-resize --format png
+```
+
+### When Auto-Resize Helps
+
+```bash
+# Large pages
+bdg dom screenshot page.png  # Auto-resizes to ~1,600 tokens
+
+# High-DPI displays
+bdg dom screenshot retina.png  # Handles DPR automatically
+
+# Token budget concerns
+bdg dom screenshot all.png  # Stays within Claude Vision limits
+```
+
+## Tips and Best Practices
+
+<Tabs>
+  <Tab title="Format Selection">
+    **Use PNG when:**
+    - Capturing text or UI
+    - Need lossless quality
+    - File size is not a concern
+    
+    **Use JPEG when:**
+    - Capturing photos or gradients
+    - File size is a concern
+    - Slight quality loss is acceptable
+  </Tab>
+  
+  <Tab title="Full Page vs Viewport">
+    **Full page:**
+    - Tall pages automatically handled
+    - Auto-resized for tokens
+    - Best for complete context
+    
+    **Viewport:**
+    - Faster capture
+    - Consistent size
+    - Mobile-friendly
+  </Tab>
+  
+  <Tab title="Element Capture">
+    Use element screenshots for:
+    - Specific components
+    - Token efficiency
+    - Focused debugging
+    - Before/after comparisons
+  </Tab>
+  
+  <Tab title="Continuous Capture">
+    Useful for:
+    - Recording animations
+    - Debugging loading states
+    - Creating documentation
+    - Time-lapse of changes
+  </Tab>
+</Tabs>
+
+## Troubleshooting
+
+### Screenshot Too Large
+
+```bash
+# Check if auto-resize is enabled
+bdg dom screenshot page.png --json | jq '.data.resized'
+
+# Manually enable auto-resize (it's default)
+bdg dom screenshot page.png
+
+# Capture viewport only
+bdg dom screenshot page.png --no-full-page
+```
+
+### Element Not Visible
+
+```bash
+# Scroll to element first
+bdg dom screenshot element.png --scroll "selector"
+
+# Check if element exists
+bdg dom query "selector"
+
+# Verify element has dimensions
+bdg dom get "selector" --raw
+```
+
+### Quality Issues
+
+```bash
+# Use PNG for text
+bdg dom screenshot page.png --format png
+
+# Increase JPEG quality
+bdg dom screenshot page.jpg --format jpeg --quality 100
+
+# Disable auto-resize for full quality
+bdg dom screenshot page.png --no-resize
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="DOM Inspection" icon="code" href="/guides/dom-inspection">
+    Query elements for screenshot targets
+  </Card>
+  
+  <Card title="Forms & Interaction" icon="hand-pointer" href="/guides/forms-and-interaction">
+    Capture form states and interactions
+  </Card>
+  
+  <Card title="API Reference" icon="book" href="/commands/dom/screenshot">
+    Complete screenshot command reference
+  </Card>
+  
+  <Card title="Console Debugging" icon="terminal" href="/guides/console-debugging">
+    Debug screenshot failures
+  </Card>
+</CardGroup>

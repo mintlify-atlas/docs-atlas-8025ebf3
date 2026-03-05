@@ -1,0 +1,458 @@
+---
+title: "Console"
+description: "Inspect console messages with smart filtering and deduplication"
+---
+
+The `bdg console` command provides intelligent console message inspection with automatic error/warning prioritization, deduplication, and object expansion.
+
+## Quick Start
+
+```bash
+# Smart summary (current page, errors/warnings deduplicated)
+bdg console
+
+# List all messages chronologically
+bdg console --list
+
+# Stream messages in real-time
+bdg console --follow
+
+# Filter by level
+bdg console --level error
+```
+
+## Syntax
+
+```bash
+bdg console [options]
+```
+
+## Default Behavior
+
+By default, `bdg console` shows:
+- **Current page only** - Messages from the most recent navigation
+- **Errors deduplicated** - With occurrence count and source location
+- **Warnings listed** - With source location
+- **Info/debug summary** - Count only
+- **Objects expanded** - Nested structure visible
+
+**Example output:**
+```text
+CONSOLE MESSAGES
+
+Errors (2 unique):
+  [3×] TypeError: Cannot read property 'value' of null
+       at app.js:127:15
+  
+  [1×] ReferenceError: undefined is not defined
+       at utils.js:45:8
+
+Warnings (1):
+  [warning] Deprecated API usage: document.write()
+            at legacy.js:89:3
+
+Info: 12 messages
+Debug: 5 messages
+```
+
+## Options
+
+### Filtering Options
+
+<ParamField path="--level" type="string">
+  Filter messages by level: `error`, `warning`, `info`, or `debug`
+  
+  **Examples:**
+  ```bash
+  bdg console --level error      # Errors only
+  bdg console --level warning    # Warnings only
+  bdg console --level info       # Info messages only
+  ```
+</ParamField>
+
+<ParamField path="--history" type="boolean" default="false">
+  Show messages from all page loads, not just the current navigation
+  
+  **Shorthand:** `-H`
+  
+  **Example:**
+  ```bash
+  bdg console --history
+  bdg console -H
+  ```
+  
+  Useful when debugging multi-page flows or tracking issues across navigations.
+</ParamField>
+
+### Display Options
+
+<ParamField path="--list" type="boolean" default="false">
+  List all messages chronologically without deduplication
+  
+  **Shorthand:** `-l`
+  
+  **Example:**
+  ```bash
+  bdg console --list
+  bdg console -l
+  ```
+  
+  Shows every message in order with timestamps and full details.
+</ParamField>
+
+<ParamField path="--last" type="number" default="100">
+  Show last N messages (0 = all)
+  
+  **Range:** 0-10000
+  
+  **Examples:**
+  ```bash
+  bdg console --last 50          # Last 50 messages
+  bdg console --last 0           # All messages
+  bdg console --last 10          # Last 10 messages
+  ```
+</ParamField>
+
+<ParamField path="--follow" type="boolean" default="false">
+  Stream console messages in real-time (updates every second)
+  
+  **Shorthand:** `-f`
+  
+  **Example:**
+  ```bash
+  bdg console --follow
+  bdg console -f
+  ```
+  
+  Press `Ctrl+C` to stop streaming.
+  
+  **Follow mode behavior:**
+  - Shows last 20 messages
+  - Updates every 1 second
+  - Clears screen on each update
+  - Respects `--level` and `--history` filters
+</ParamField>
+
+<ParamField path="--json" type="boolean" default="false">
+  Output JSON format with summary statistics
+  
+  **Example:**
+  ```bash
+  bdg console --json
+  ```
+  
+  Returns structured data including message counts by level.
+</ParamField>
+
+## Output Modes
+
+### Smart Summary (Default)
+
+The default mode intelligently organizes messages:
+
+```bash
+bdg console
+```
+
+**Features:**
+- Errors grouped by message and stack trace
+- Occurrence counts for duplicate errors
+- Source file and line numbers
+- Warning details
+- Summary counts for info/debug
+
+### Chronological List
+
+View all messages in order:
+
+```bash
+bdg console --list
+```
+
+**Output:**
+```text
+[12:34:56.123] [log] Application initialized
+[12:34:57.456] [info] Loading user data...
+[12:34:58.789] [error] Failed to fetch: Network error
+[12:34:59.012] [warning] Deprecated API: Use fetch() instead
+[12:35:00.345] [log] User: {name: "John", roles: ["admin", "user"]}
+```
+
+### Real-Time Streaming
+
+Monitor console messages as they arrive:
+
+```bash
+bdg console --follow
+```
+
+**Use cases:**
+- Watch for errors during testing
+- Monitor API calls
+- Track user interactions
+- Debug timing issues
+
+## Object Expansion
+
+Console messages containing objects are automatically expanded to show nested values:
+
+**Without expansion:**
+```text
+[log] User: [object Object]
+[log] Config: [object Object]
+```
+
+**With expansion (automatic):**
+```text
+[log] User: {name: "John", email: "john@example.com", roles: ["admin", "user"]}
+[log] Config: {api: {endpoint: "https://api.example.com", timeout: 5000}, features: {darkMode: true}}
+```
+
+**Features:**
+- Nested objects expanded up to 3 levels deep
+- Arrays show actual contents: `[1, 2, 3]` instead of `Array(3)`
+- Large objects truncated with `…` indicator
+- Special types formatted: `Date`, `RegExp`, `Error`, `Map`, `Set`
+
+## Filtering by Level
+
+Console messages are categorized into four levels:
+
+| Level | Description | CLI Flag |
+|-------|-------------|----------|
+| `error` | JavaScript errors, failed assertions | `--level error` |
+| `warning` | Warnings, deprecations | `--level warning` |
+| `info` | Informational messages | `--level info` |
+| `debug` | Debug messages, verbose logging | `--level debug` |
+
+**Examples:**
+
+```bash
+# Only errors
+bdg console --level error
+
+# Only warnings
+bdg console --level warning
+
+# Errors in real-time
+bdg console --level error --follow
+
+# Info messages from all navigations
+bdg console --level info --history
+```
+
+## Common Workflows
+
+### Debug Errors on Current Page
+
+```bash
+# Start session
+bdg https://example.com
+
+# Check for errors
+bdg console --level error
+
+# View full error details
+bdg console --list --level error
+```
+
+### Monitor Real-Time Logging
+
+```bash
+# Start session
+bdg https://example.com
+
+# Stream all messages
+bdg console --follow
+
+# Stream only errors
+bdg console --follow --level error
+```
+
+### Inspect Multi-Page Flow
+
+```bash
+# Start session
+bdg https://example.com/login
+
+# Navigate through flow
+bdg dom fill "#username" "admin"
+bdg dom fill "#password" "secret"
+bdg dom click "#login-btn"
+
+# Check messages across all pages
+bdg console --history --level error
+```
+
+### Export Console Data
+
+```bash
+# JSON output for analysis
+bdg console --json > console.json
+
+# Filter and export
+bdg console --level error --json | jq '.data.filtered' > errors.json
+
+# List format with object expansion
+bdg console --list > console.log
+```
+
+## JSON Output Format
+
+The `--json` flag returns structured data:
+
+```json
+{
+  "version": "0.5.1",
+  "success": true,
+  "data": {
+    "messages": [
+      {
+        "type": "error",
+        "level": "error",
+        "text": "TypeError: Cannot read property 'value' of null",
+        "url": "https://example.com/app.js",
+        "lineNumber": 127,
+        "stackTrace": {
+          "callFrames": [
+            {
+              "functionName": "handleClick",
+              "url": "https://example.com/app.js",
+              "lineNumber": 127,
+              "columnNumber": 15
+            }
+          ]
+        },
+        "timestamp": 1699887234567,
+        "navigationId": 2
+      }
+    ],
+    "filtered": [...],
+    "summary": {
+      "total": 45,
+      "byLevel": {
+        "error": 3,
+        "warning": 2,
+        "info": 25,
+        "debug": 15
+      },
+      "current": 30,
+      "historical": 15
+    }
+  }
+}
+```
+
+**Fields:**
+- `messages` - All captured console messages
+- `filtered` - Messages after applying filters (level, history)
+- `summary` - Statistics about message counts
+
+## Examples with Real Output
+
+### View All Error Messages
+
+```bash
+$ bdg console --level error --list
+```
+
+**Output:**
+```text
+[12:34:58.789] [error] TypeError: Cannot read property 'value' of null
+                       at handleClick (app.js:127:15)
+                       at HTMLButtonElement.<anonymous> (app.js:215:9)
+
+[12:35:12.456] [error] Failed to fetch user data
+                       at loadUser (api.js:45:8)
+                       at async init (app.js:89:3)
+
+[12:35:45.123] [error] ReferenceError: $ is not defined
+                       at formatData (utils.js:67:5)
+```
+
+### Monitor API Calls
+
+```bash
+$ bdg console --follow --level info
+```
+
+**Output (updates every second):**
+```text
+[12:35:01.234] [info] Fetching /api/users...
+[12:35:01.567] [info] Response: {users: [...]}
+[12:35:02.890] [info] Fetching /api/posts...
+[12:35:03.123] [info] Response: {posts: [...]}
+```
+
+### Check Console State
+
+```bash
+$ bdg console --json | jq '.data.summary'
+```
+
+**Output:**
+```json
+{
+  "total": 45,
+  "byLevel": {
+    "error": 3,
+    "warning": 2,
+    "info": 25,
+    "debug": 15
+  },
+  "current": 30,
+  "historical": 15
+}
+```
+
+## Navigation Context
+
+Console messages are tracked per navigation (page load). Each time the page navigates to a new URL, the `navigationId` increments.
+
+**Default behavior (current page only):**
+```bash
+bdg console
+```
+Shows messages from `navigationId: N` (most recent).
+
+**Include all navigations:**
+```bash
+bdg console --history
+```
+Shows messages from all `navigationId` values.
+
+**Use case:** Track errors across login flow
+```bash
+bdg https://example.com/login
+bdg dom fill "#username" "admin"
+bdg dom click "#submit"  # Navigates to /dashboard
+
+# Without --history: only /dashboard messages
+bdg console
+
+# With --history: /login + /dashboard messages
+bdg console --history
+```
+
+## Exit Codes
+
+| Code | Meaning |
+|------|----------|
+| 0 | Success |
+| 81 | Invalid arguments (invalid --last value, invalid --level) |
+| 83 | No active session |
+| 102 | Connection timeout |
+
+## Related Commands
+
+- `bdg cdp Console.enable` - Enable Console domain via CDP
+- `bdg peek --console` - Quick preview of recent console messages
+- `bdg details console <index>` - Full details for a specific message
+
+## Tips
+
+- Use `--list` to see raw chronological output without smart grouping
+- Combine `--level error --follow` to monitor errors in real-time
+- Use `--json` for programmatic processing with `jq`
+- Use `--history` when debugging multi-page flows
+- Object expansion works automatically - no need for manual serialization

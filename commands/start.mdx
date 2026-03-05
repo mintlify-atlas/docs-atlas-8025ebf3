@@ -1,0 +1,318 @@
+---
+title: 'bdg start'
+description: 'Start a browser session with Chrome DevTools Protocol telemetry collection'
+---
+
+## Overview
+
+The `start` command (default command when no subcommand is specified) launches a Chrome browser instance and starts collecting telemetry data including DOM, network requests, and console messages.
+
+## Syntax
+
+```bash
+bdg [url] [options]
+```
+
+<ParamField path="url" type="string" optional>
+  Target URL to navigate to. Supports:
+  - Full URLs: `https://example.com`
+  - Domains: `example.com` (prepends `https://`)
+  - Localhost: `localhost:3000` (prepends `http://`)
+  - IP addresses: `192.168.1.100:8080`
+</ParamField>
+
+<Note>
+Running `bdg` without a URL displays comprehensive help with agent discovery resources and common task examples.
+</Note>
+
+## Options
+
+### Basic Options
+
+<ParamField path="--port" type="number" default="9222">
+  Chrome debugging port for CDP connection
+  
+  ```bash
+  bdg localhost:3000 --port 9223
+  ```
+</ParamField>
+
+<ParamField path="--timeout" type="number">
+  Auto-stop session after specified seconds (1-3600). Unlimited if not specified.
+  
+  ```bash
+  bdg example.com --timeout 30
+  ```
+</ParamField>
+
+<ParamField path="--user-data-dir" type="path">
+  Custom Chrome profile directory. Defaults to session directory (`~/.bdg/chrome-profile/`).
+  
+  ```bash
+  bdg example.com --user-data-dir ~/custom-profile
+  ```
+</ParamField>
+
+### Data Collection Options
+
+<ParamField path="--all" type="boolean" default="false">
+  Include all network data (disable filtering of tracking/analytics requests)
+  
+  ```bash
+  bdg example.com --all
+  ```
+</ParamField>
+
+<ParamField path="--max-body-size" type="number" default="5">
+  Maximum response body size in megabytes (1-100). Bodies larger than this are truncated.
+  
+  ```bash
+  bdg example.com --max-body-size 10
+  ```
+</ParamField>
+
+<ParamField path="--compact" type="boolean" default="false">
+  Use compact JSON format (no indentation) for output files. Reduces file size by ~30%.
+  
+  ```bash
+  bdg example.com --compact
+  ```
+</ParamField>
+
+### Chrome Options
+
+<ParamField path="--headless" type="boolean">
+  Run Chrome in headless mode. Auto-enabled if no display server detected (X11/Wayland).
+  
+  ```bash
+  bdg example.com --headless
+  ```
+</ParamField>
+
+<ParamField path="--no-headless" type="boolean">
+  Show browser window (disable headless mode)
+  
+  ```bash
+  bdg example.com --no-headless
+  ```
+</ParamField>
+
+<ParamField path="--chrome-ws-url" type="string">
+  Connect to existing Chrome instance via WebSocket URL (skips Chrome launch)
+  
+  ```bash
+  bdg --chrome-ws-url ws://localhost:9222/devtools/page/ABC123
+  ```
+</ParamField>
+
+<ParamField path="--chrome-flags" type="string">
+  Custom Chrome flags (space-separated). Merged with `BDG_CHROME_FLAGS` environment variable.
+  
+  ```bash
+  bdg example.com --chrome-flags="--ignore-certificate-errors --disable-web-security"
+  ```
+</ParamField>
+
+### Output Options
+
+<ParamField path="--quiet" type="boolean" default="false">
+  Quiet mode - minimal output for AI agents. Suppresses verbose landing page.
+  
+  ```bash
+  bdg example.com --quiet
+  ```
+</ParamField>
+
+## Examples
+
+### Basic Session
+
+```bash
+# Start session with HTTPS URL
+bdg https://example.com
+
+# Start session with domain (auto-prepends https://)
+bdg example.com
+
+# Start session with localhost (auto-prepends http://)
+bdg localhost:3000
+```
+
+### Headless Mode
+
+```bash
+# Explicit headless mode
+bdg example.com --headless
+
+# Force browser window
+bdg localhost:3000 --no-headless
+```
+
+### Custom Configuration
+
+```bash
+# Custom port and timeout
+bdg example.com --port 9223 --timeout 60
+
+# Capture all requests with larger body limit
+bdg example.com --all --max-body-size 10
+
+# Compact output with custom profile
+bdg example.com --compact --user-data-dir ~/chrome-profiles/dev
+```
+
+### Connect to Existing Chrome
+
+```bash
+# Launch Chrome manually with remote debugging
+/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
+  --remote-debugging-port=9222
+
+# Get WebSocket URL from http://localhost:9222/json
+curl -s http://localhost:9222/json | jq -r '.[0].webSocketDebuggerUrl'
+
+# Connect bdg to existing Chrome
+bdg --chrome-ws-url ws://localhost:9222/devtools/page/ABC123
+```
+
+### Custom Chrome Flags
+
+```bash
+# Ignore certificate errors for local development
+bdg localhost:3000 --chrome-flags="--ignore-certificate-errors"
+
+# Multiple flags
+bdg example.com --chrome-flags="--window-size=1920,1080 --disable-gpu"
+
+# Combine with environment variable
+export BDG_CHROME_FLAGS="--ignore-certificate-errors"
+bdg localhost:3000 --chrome-flags="--disable-web-security"
+# Result: Both flags applied (env flags first, CLI flags after)
+```
+
+## Output
+
+### Success
+
+On successful start, displays a landing page with available commands:
+
+```
+Session Started
+
+Target: https://example.com
+
+Common Tasks:
+  bdg dom form                      # Discover forms (auto-selects most relevant)
+  bdg dom fill "#email" "user@..."   # Fill input field
+  bdg dom click "button"             # Click element
+  bdg peek                          # Preview collected data
+
+Live Monitoring:
+  bdg status                        # Show session status
+  bdg peek --network                # Preview network requests
+  bdg console                       # Show console messages
+
+Session Management:
+  bdg stop                          # Stop session and save data
+  bdg cleanup --force               # Force cleanup stale files
+```
+
+Use `--quiet` to suppress this output:
+
+```bash
+bdg example.com --quiet
+# (no output, session started in background)
+```
+
+### Error
+
+If the URL is invalid:
+
+```bash
+bdg invalid-url
+# Error: Invalid URL format
+# Suggestion: Try: bdg example.com or bdg https://example.com
+```
+
+If a session is already active:
+
+```bash
+bdg example.com
+# Error: Session already exists
+# Suggestion: Stop existing session: bdg stop
+```
+
+## Session Files
+
+Session data is stored in `~/.bdg/`:
+
+- **daemon.pid** - Daemon process ID
+- **daemon.sock** - Unix socket for IPC
+- **session.meta.json** - Session metadata (Chrome PID, CDP port, target info)
+- **chrome-profile/** - Chrome user data directory
+- **session.json** - Final output (written only on `bdg stop`)
+
+<Note>
+Data stays in memory during the session. Only written to `session.json` on stop.
+</Note>
+
+## Exit Codes
+
+<ResponseField name="0" type="SUCCESS">
+  Session started successfully
+</ResponseField>
+
+<ResponseField name="80" type="INVALID_URL">
+  Invalid URL format or unreachable URL
+</ResponseField>
+
+<ResponseField name="84" type="RESOURCE_ALREADY_EXISTS">
+  Session already exists (stop existing session first)
+</ResponseField>
+
+<ResponseField name="100" type="CHROME_LAUNCH_FAILURE">
+  Chrome browser failed to launch
+</ResponseField>
+
+<ResponseField name="101" type="CDP_CONNECTION_FAILURE">
+  Failed to connect to Chrome DevTools Protocol
+</ResponseField>
+
+<ResponseField name="102" type="CDP_TIMEOUT">
+  CDP connection or page load timed out
+</ResponseField>
+
+## Related Commands
+
+<CardGroup cols={2}>
+  <Card title="bdg status" icon="chart-line" href="/commands/status">
+    Check session status and statistics
+  </Card>
+  <Card title="bdg stop" icon="stop" href="/commands/stop">
+    Stop session and save telemetry data
+  </Card>
+  <Card title="bdg cleanup" icon="broom" href="/commands/cleanup">
+    Clean up stale session files
+  </Card>
+  <Card title="bdg peek" icon="eye" href="/commands/peek">
+    Preview collected data in real-time
+  </Card>
+</CardGroup>
+
+## Tips
+
+<Tip>
+**For AI Agents**: Use `--quiet` flag to suppress verbose output and `--json` on subsequent commands for structured data.
+</Tip>
+
+<Tip>
+**Token Optimization**: Use `--compact` to reduce session.json file size by ~30% (no whitespace).
+</Tip>
+
+<Warning>
+**Headless Auto-Detection**: Chrome runs headless automatically if no display server is detected (SSH sessions, Docker). Use `--no-headless` to force window mode if needed.
+</Warning>
+
+<Warning>
+**One Session at a Time**: Only one session can run simultaneously. Stop the existing session before starting a new one.
+</Warning>

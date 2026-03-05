@@ -1,0 +1,519 @@
+---
+title: "Discovery Pattern"
+description: "How AI agents discover bdg capabilities without external documentation"
+---
+
+## Progressive Discovery
+
+bdg implements a self-documenting architecture where agents learn capabilities through interaction, not documentation. This eliminates documentation drift and reduces context window consumption.
+
+```bash
+# Agent starts with zero knowledge
+bdg --help --json                    # Level 0: Tool capabilities
+bdg cdp --list                       # Level 1: Domain discovery
+bdg cdp Network --list               # Level 2: Method discovery
+bdg cdp Network.getCookies --describe # Level 3: Schema + examples
+bdg cdp Network.getCookies           # Level 4: Execute with confidence
+```
+
+## The Discovery Hierarchy
+
+### Level 0: Tool Schema
+
+Discover what the tool can do:
+
+```bash
+bdg --help --json
+```
+
+```json
+{
+  "name": "bdg",
+  "version": "0.6.0",
+  "commands": [
+    {
+      "name": "cdp",
+      "description": "Execute CDP commands or introspect protocol",
+      "modes": ["execute", "list", "describe", "search"]
+    },
+    {
+      "name": "dom",
+      "description": "DOM inspection and manipulation",
+      "subcommands": ["query", "get", "click", "fill", "scroll"]
+    },
+    {
+      "name": "console",
+      "description": "Console message inspection"
+    },
+    {
+      "name": "network",
+      "description": "Network request inspection",
+      "subcommands": ["list", "har"]
+    }
+  ],
+  "exit_codes": {
+    "0": "Success",
+    "80": "Invalid URL",
+    "81": "Invalid arguments",
+    "83": "Resource not found",
+    "87": "Stale cache",
+    "102": "CDP timeout"
+  }
+}
+```
+
+<Info>
+  Machine-readable help includes all commands, options, examples, and exit codes
+</Info>
+
+### Level 1: Domain Discovery
+
+List all available CDP domains:
+
+```bash
+bdg cdp --list
+```
+
+```
+Available CDP Domains (53):
+
+Accessibility    Animation       Audits          Autofill
+Browser          CSS             CacheStorage    Cast
+Console          DOM             DOMDebugger     DOMSnapshot
+Database         DeviceAccess    Emulation       EventBreakpoints
+Fetch            HeadlessExperimental  IO        IndexedDB
+Input            Inspector       LayerTree       Log
+Media            Memory          Network         Overlay
+Page             Performance     PerformanceTimeline  Preload
+Profiler         Runtime         Schema          Security
+ServiceWorker    Storage         SystemInfo      Target
+Tracing          WebAudio        WebAuthn
+```
+
+JSON output for programmatic consumption:
+
+```bash
+bdg cdp --list --json
+```
+
+```json
+{
+  "version": "0.6.0",
+  "success": true,
+  "data": {
+    "domains": [
+      "Accessibility",
+      "Animation",
+      "Audits",
+      "Browser",
+      "CSS",
+      "Console",
+      "DOM",
+      "Network",
+      "Runtime"
+    ],
+    "count": 53
+  }
+}
+```
+
+### Level 2: Method Discovery
+
+List all methods in a specific domain:
+
+```bash
+bdg cdp Network --list
+```
+
+```
+Network Domain Methods (39):
+
+canClearBrowserCache          canClearBrowserCookies
+canEmulateNetworkConditions   clearBrowserCache
+clearBrowserCookies           clearAcceptedEncodingsOverride
+continueInterceptedRequest    deleteCookies
+disable                       emulateNetworkConditions
+enable                        getAllCookies
+getCertificate                getCookies
+getRequestPostData            getResponseBody
+getResponseBodyForInterception  getSecurityIsolationStatus
+loadNetworkResource           replayXHR
+searchInResponseBody          setAcceptedEncodings
+setAttachDebugStack           setBlockedURLs
+setBypassServiceWorker        setCacheDisabled
+setCookie                     setCookies
+setDataSizeLimitsForTest      setExtraHTTPHeaders
+setRequestInterception        setUserAgentOverride
+streamResourceContent         takeResponseBodyForInterceptionAsStream
+```
+
+JSON output:
+
+```bash
+bdg cdp Network --list --json
+```
+
+```json
+{
+  "version": "0.6.0",
+  "success": true,
+  "data": {
+    "domain": "Network",
+    "methods": [
+      "canClearBrowserCache",
+      "canClearBrowserCookies",
+      "clearBrowserCache",
+      "getCookies",
+      "getAllCookies",
+      "setCookie"
+    ],
+    "count": 39
+  }
+}
+```
+
+### Level 3: Schema Discovery
+
+Get full method schema with parameters, return values, and examples:
+
+```bash
+bdg cdp Network.getCookies --describe
+```
+
+```json
+{
+  "domain": "Network",
+  "method": "getCookies",
+  "description": "Returns all browser cookies. Depending on the backend support, will return detailed cookie information in the cookies field.",
+  "parameters": {
+    "urls": {
+      "type": "array",
+      "items": {"type": "string"},
+      "optional": true,
+      "description": "The list of URLs for which applicable cookies will be fetched. If not specified, it's assumed to be set to the list containing only the currently inspected URL."
+    }
+  },
+  "returns": {
+    "cookies": {
+      "type": "array",
+      "items": {"$ref": "Cookie"},
+      "description": "Array of cookie objects."
+    }
+  },
+  "examples": [
+    "bdg cdp Network.getCookies",
+    "bdg cdp Network.getCookies --params '{\"urls\":[\"https://example.com\"]}'",
+    "bdg cdp Network.getCookies --params '{\"urls\":[\"https://example.com\",\"https://another.com\"]}'"
+  ],
+  "deprecated": false
+}
+```
+
+<Tip>
+  Every method description includes executable examples - copy and run immediately
+</Tip>
+
+### Level 4: Execute
+
+Run the command with confidence:
+
+```bash
+bdg cdp Network.getCookies
+```
+
+```json
+{
+  "version": "0.6.0",
+  "success": true,
+  "data": {
+    "cookies": [
+      {
+        "name": "session_id",
+        "value": "abc123",
+        "domain": ".example.com",
+        "path": "/",
+        "expires": 1735689600,
+        "size": 17,
+        "httpOnly": true,
+        "secure": true,
+        "sameSite": "Lax"
+      }
+    ]
+  }
+}
+```
+
+## Search-Driven Discovery
+
+Agents can search by concept without knowing exact method names.
+
+### Search by Keyword
+
+```bash
+bdg cdp --search cookie
+```
+
+```
+Found 14 methods matching 'cookie':
+
+Network.getCookies
+  Returns all browser cookies
+
+Network.getAllCookies
+  Returns all browser cookies for all URLs
+
+Network.deleteCookies
+  Deletes browser cookies with matching name and url or domain/path/partitionKey pair
+
+Network.setCookie
+  Sets a cookie with the given cookie data; may overwrite equivalent cookies if they exist
+
+Network.setCookies
+  Sets given cookies
+
+Storage.getCookies
+  Returns all browser cookies
+
+Storage.setCookies
+  Sets given cookies
+
+... (7 more results)
+```
+
+### Search by Concept
+
+```bash
+bdg cdp --search "javascript execution"
+```
+
+```
+Found 8 methods matching 'javascript execution':
+
+Runtime.evaluate
+  Evaluates expression on global object
+
+Runtime.callFunctionOn
+  Calls function with given declaration on the given object
+
+Debugger.evaluateOnCallFrame
+  Evaluates expression on a given call frame
+
+Page.addScriptToEvaluateOnNewDocument
+  Evaluates given script in every frame upon creation
+
+... (4 more results)
+```
+
+### Fuzzy Matching (Typo Tolerance)
+
+```bash
+bdg cdp Network.getCokies
+```
+
+```
+Error: Method 'getCokies' not found in domain 'Network'
+
+Did you mean:
+  Network.getCookies (edit distance: 2)
+  Network.setCookies (edit distance: 3)
+  Network.getAllCookies (edit distance: 4)
+
+Tip: Use 'bdg cdp Network --list' to see all available methods
+```
+
+<Check>
+  Levenshtein distance algorithm suggests closest matches for typos
+</Check>
+
+## Flag Discovery
+
+Many flags have non-obvious behaviors. bdg provides behavioral metadata:
+
+```bash
+bdg --help --json | jq '.commands[] | select(.name == "screenshot") | .options[] | select(.flags | contains("--no-resize"))'
+```
+
+```json
+{
+  "flags": "--no-resize",
+  "description": "Disable auto-resize for Claude Vision",
+  "behavior": {
+    "default": "Images auto-resized to max 1568px longest edge for Claude Vision optimization (~1,600 tokens)",
+    "whenDisabled": "Full resolution capture preserved (may use 10,000+ tokens for large pages)",
+    "automaticBehavior": "Pages taller than 10:1 aspect ratio automatically use viewport-only capture to prevent unreadable scaled text",
+    "tokenImpact": "Formula: tokens = (width × height) / 750. Default resize targets ~1,600 tokens."
+  }
+}
+```
+
+<Info>
+  **Option behaviors** document hidden flag interactions and token implications
+</Info>
+
+### Example: Console Flag Behaviors
+
+```bash
+bdg --help --json | jq '.commands[] | select(.name == "console") | .options[0].behavior'
+```
+
+```json
+{
+  "default": "Shows messages from current page load only (most recent navigation)",
+  "whenEnabled": "Shows messages from ALL page loads during the session",
+  "automaticBehavior": "Page navigations create new 'navigation contexts' - default filters to latest context"
+}
+```
+
+## Discovery Pattern Examples
+
+### Example 1: Agent Learns Network Analysis
+
+```typescript
+// Agent workflow (zero prior knowledge)
+
+// 1. Discover tool capabilities
+const help = await exec('bdg --help --json');
+// Learns: "network" command exists
+
+// 2. Discover network subcommands
+const networkHelp = await exec('bdg network --help --json');
+// Learns: "list" and "har" subcommands
+
+// 3. Execute network analysis
+const requests = await exec('bdg network list --json');
+// Success: Gets all network requests
+
+// 4. Export HAR for deeper analysis
+const har = await exec('bdg network har -');
+// Success: Standard HAR format for tooling
+```
+
+### Example 2: Agent Discovers Memory Profiling
+
+```typescript
+// 1. Search for memory-related methods
+const search = await exec('bdg cdp --search heap');
+// Finds: Runtime.getHeapUsage, HeapProfiler.takeHeapSnapshot, etc.
+
+// 2. Get schema for heap method
+const schema = await exec('bdg cdp Runtime.getHeapUsage --describe');
+// Learns: No parameters required, returns {usedSize, totalSize}
+
+// 3. Execute measurement
+const baseline = await exec('bdg cdp Runtime.getHeapUsage --json');
+// Success: {usedSize: 833000, totalSize: 1500000}
+
+// 4. Trigger action and re-measure
+await exec('bdg dom click "button"');
+const after = await exec('bdg cdp Runtime.getHeapUsage --json');
+// Success: {usedSize: 790000, totalSize: 3000000}
+// Analysis: 100% embedder heap growth = memory leak detected
+```
+
+### Example 3: Agent Discovers Form Automation
+
+```typescript
+// 1. Discover DOM capabilities
+const domHelp = await exec('bdg dom --help --json');
+// Learns: query, get, click, fill, submit, scroll, form
+
+// 2. Discover form structure
+const form = await exec('bdg dom form --brief');
+// Learns: Field names, types, validation rules
+
+// 3. Fill form fields
+await exec('bdg dom fill "input[name=email]" "test@example.com"');
+await exec('bdg dom fill "input[name=age]" "25"');
+
+// 4. Submit form
+await exec('bdg dom submit "form"');
+// Success: Form submitted with validation
+```
+
+## Case-Insensitive Commands
+
+bdg accepts case-insensitive CDP method names for agent convenience:
+
+```bash
+# All of these work
+bdg cdp Network.getCookies
+bdg cdp network.getcookies
+bdg cdp NETWORK.GETCOOKIES
+bdg cdp Network.GetCookies
+```
+
+<Tip>
+  Case insensitivity reduces agent errors when models hallucinate method casing
+</Tip>
+
+## Progressive Disclosure Benefits
+
+<CardGroup cols={2}>
+  <Card title="Zero Documentation Drift" icon="check">
+    Tool IS the documentation - schemas generated from protocol definitions
+  </Card>
+  <Card title="Low Context Cost" icon="gauge">
+    Agent learns exactly what it needs, when it needs it
+  </Card>
+  <Card title="Offline-First" icon="wifi-slash">
+    No external dependencies - all discovery works offline
+  </Card>
+  <Card title="Runtime Validation" icon="shield-check">
+    Tool validates agent understanding immediately
+  </Card>
+</CardGroup>
+
+## Comparison: Discovery Approaches
+
+### Traditional Documentation Approach
+
+```text
+Agent → Read README → Read API docs → Read examples → Try command
+  ↑                                                         ↓
+  └────────── Debug error, re-read docs ──────────────────┘
+```
+
+**Problems:**
+- Documentation drift
+- High context window cost
+- Requires web access
+- Discovery friction
+
+### bdg Progressive Discovery
+
+```text
+Agent → Ask tool → Tool teaches → Execute
+  ↑                                   ↓
+  └────── Error with suggestion ──────┘
+```
+
+**Benefits:**
+- Always current
+- Low token cost
+- Offline-capable
+- Natural exploration
+
+## Discovery Metrics
+
+From real agent benchmarks:
+
+| Metric | With Discovery | Without Discovery |
+|--------|----------------|-------------------|
+| Time to first success | 30s | 120s+ |
+| Failed attempts | 0-1 | 3-5 |
+| Context tokens | ~2K | ~15K+ |
+| External docs needed | 0 | Multiple pages |
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/agents/error-handling">
+    Learn about semantic exit codes and recovery
+  </Card>
+  <Card title="Benchmarks" icon="chart-line" href="/agents/benchmarks">
+    See discovery pattern in real debugging tasks
+  </Card>
+  <Card title="Quick Reference" icon="book" href="/commands/start">
+    Common commands and patterns
+  </Card>
+</CardGroup>

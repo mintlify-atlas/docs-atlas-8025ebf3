@@ -1,0 +1,461 @@
+---
+title: "CDP Domains"
+description: "Reference guide to major Chrome DevTools Protocol domains"
+---
+
+The Chrome DevTools Protocol is organized into 53 domains, each providing methods and events for specific browser functionality. This page covers the most commonly used domains.
+
+## Discovery Commands
+
+Before diving into specific domains, use these commands to explore:
+
+```bash
+# List all 53 domains
+bdg cdp --list
+
+# List methods in a domain
+bdg cdp Network --list
+bdg cdp Page --list
+
+# Search across all methods
+bdg cdp --search cookie
+bdg cdp --search screenshot
+```
+
+## Core Domains
+
+### Runtime
+
+**Exposes JavaScript runtime** - Evaluate expressions, get object properties, and work with the JavaScript execution context.
+
+**Key Methods:**
+- `Runtime.evaluate` - Execute JavaScript expressions
+- `Runtime.callFunctionOn` - Call a function on an object
+- `Runtime.getProperties` - Get object properties
+- `Runtime.getIsolateId` - Get V8 isolate ID
+
+**Examples:**
+```bash
+# Evaluate JavaScript
+bdg cdp Runtime.evaluate --params '{"expression":"document.title"}'
+
+# Get element properties
+bdg cdp Runtime.evaluate --params '{"expression":"document.querySelector(\"h1\").textContent"}'
+
+# Execute complex script with return value
+bdg cdp Runtime.evaluate --params '{
+  "expression":"(() => ({ url: location.href, title: document.title }))()",
+  "returnByValue":true
+}'
+```
+
+### Page
+
+**Page lifecycle and navigation** - Control page loading, navigation, screenshots, and lifecycle events.
+
+**Key Methods:**
+- `Page.navigate` - Navigate to a URL
+- `Page.reload` - Reload the page
+- `Page.getNavigationHistory` - Get navigation history
+- `Page.captureScreenshot` - Capture screenshot (use `bdg dom screenshot` instead)
+- `Page.printToPDF` - Generate PDF of page
+
+**Examples:**
+```bash
+# Navigate to URL
+bdg cdp Page.navigate --params '{"url":"https://example.com"}'
+
+# Reload page
+bdg cdp Page.reload
+
+# Get navigation history
+bdg cdp Page.getNavigationHistory
+
+# Generate PDF
+bdg cdp Page.printToPDF --params '{"landscape":true}'
+```
+
+### Network
+
+**Network traffic monitoring** - Inspect requests, responses, cookies, and caching.
+
+**Key Methods:**
+- `Network.getCookies` - Get browser cookies
+- `Network.setCookie` - Set a cookie
+- `Network.deleteCookies` - Delete cookies
+- `Network.getAllCookies` - Get all cookies (all URLs)
+- `Network.clearBrowserCache` - Clear browser cache
+- `Network.clearBrowserCookies` - Clear all cookies
+
+**Examples:**
+```bash
+# Get cookies for current page
+bdg cdp Network.getCookies
+
+# Get all cookies
+bdg cdp Network.getAllCookies
+
+# Set a cookie
+bdg cdp Network.setCookie --params '{
+  "name":"session",
+  "value":"abc123",
+  "domain":"example.com"
+}'
+
+# Clear cookies
+bdg cdp Network.clearBrowserCookies
+
+# Clear cache
+bdg cdp Network.clearBrowserCache
+```
+
+**Note:** For inspecting captured network traffic, use `bdg network` commands instead.
+
+### DOM
+
+**Document Object Model inspection** - Query, modify, and traverse the DOM tree.
+
+**Key Methods:**
+- `DOM.getDocument` - Get document root node
+- `DOM.querySelector` - Query selector (returns nodeId)
+- `DOM.querySelectorAll` - Query all matching elements
+- `DOM.getAttributes` - Get element attributes
+- `DOM.getOuterHTML` - Get element HTML
+- `DOM.focus` - Focus an element
+
+**Examples:**
+```bash
+# Get document root
+bdg cdp DOM.getDocument
+
+# Query for element (need root nodeId first)
+bdg cdp DOM.querySelector --params '{"nodeId":1,"selector":"h1"}'
+
+# Get element HTML
+bdg cdp DOM.getOuterHTML --params '{"nodeId":123}'
+```
+
+**Note:** For higher-level DOM operations, use `bdg dom` commands which handle nodeId management automatically.
+
+### Input
+
+**Simulated user input** - Dispatch keyboard, mouse, and touch events.
+
+**Key Methods:**
+- `Input.dispatchKeyEvent` - Dispatch keyboard events
+- `Input.dispatchMouseEvent` - Dispatch mouse events
+- `Input.insertText` - Insert text at cursor
+
+**Examples:**
+```bash
+# Type text
+bdg cdp Input.insertText --params '{"text":"Hello World"}'
+
+# Press Enter key
+bdg cdp Input.dispatchKeyEvent --params '{
+  "type":"keyDown",
+  "key":"Enter"
+}'
+
+# Click at coordinates
+bdg cdp Input.dispatchMouseEvent --params '{
+  "type":"mousePressed",
+  "x":100,
+  "y":200,
+  "button":"left",
+  "clickCount":1
+}'
+```
+
+**Note:** For form filling and clicking, use `bdg dom fill` and `bdg dom click` which handle element targeting automatically.
+
+## Debugging Domains
+
+### Console
+
+**Console message access** - Enable console logging and message inspection.
+
+**Key Methods:**
+- `Console.enable` - Enable console domain
+- `Console.disable` - Disable console domain
+
+**Note:** For viewing console messages, use `bdg console` commands instead.
+
+### Debugger
+
+**JavaScript debugging** - Set breakpoints, step through code, and evaluate in scope.
+
+**Key Methods:**
+- `Debugger.enable` - Enable debugger
+- `Debugger.setBreakpoint` - Set breakpoint
+- `Debugger.pause` - Pause execution
+- `Debugger.resume` - Resume execution
+- `Debugger.stepOver` - Step over statement
+
+### Log
+
+**Log message access** - Browser log entries and violations.
+
+**Key Methods:**
+- `Log.enable` - Enable log domain
+- `Log.clear` - Clear log
+
+## Performance Domains
+
+### Performance
+
+**Performance metrics** - Timing, memory, and performance measurement.
+
+**Key Methods:**
+- `Performance.enable` - Enable performance tracking
+- `Performance.getMetrics` - Get current metrics
+- `Performance.disable` - Disable performance tracking
+
+**Examples:**
+```bash
+# Get performance metrics
+bdg cdp Performance.enable
+bdg cdp Performance.getMetrics
+```
+
+### Profiler
+
+**CPU profiling** - Sampling profiler for JavaScript performance analysis.
+
+**Key Methods:**
+- `Profiler.enable` - Enable profiler
+- `Profiler.start` - Start CPU profiling
+- `Profiler.stop` - Stop profiling and get data
+
+**Event-based:** Results arrive after calling `Profiler.stop`, not from the start method.
+
+**Examples:**
+```bash
+# Collect CPU profile
+bdg cdp Profiler.enable
+bdg cdp Profiler.start
+# ... perform actions ...
+bdg cdp Profiler.stop  # Returns profile data
+```
+
+### HeapProfiler
+
+**Memory profiling** - Heap snapshots and sampling heap profiler.
+
+**Key Methods:**
+- `HeapProfiler.enable` - Enable heap profiler
+- `HeapProfiler.takeHeapSnapshot` - Take heap snapshot
+- `HeapProfiler.startSampling` - Start sampling
+- `HeapProfiler.stopSampling` - Stop and get samples
+
+**Event-based:** Snapshot data arrives via events after `takeHeapSnapshot`.
+
+### Tracing
+
+**Performance tracing** - Detailed performance traces for analysis.
+
+**Key Methods:**
+- `Tracing.start` - Start tracing
+- `Tracing.end` - End tracing
+- `Tracing.getCategories` - Get trace categories
+
+**Event-based:** Data arrives via `Tracing.dataCollected` events after calling `Tracing.end`.
+
+## Accessibility
+
+### Accessibility
+
+**Accessibility tree inspection** - Query accessibility properties and ARIA attributes.
+
+**Key Methods:**
+- `Accessibility.getFullAXTree` - Get full accessibility tree
+- `Accessibility.getPartialAXTree` - Get partial tree from node
+- `Accessibility.queryAXTree` - Query accessibility tree
+
+**Examples:**
+```bash
+# Get full accessibility tree
+bdg cdp Accessibility.getFullAXTree
+
+# Query by role
+bdg cdp Accessibility.queryAXTree --params '{
+  "role":"button"
+}'
+```
+
+**Note:** For higher-level accessibility inspection, use `bdg dom a11y` commands.
+
+## Visual Debugging
+
+### Overlay
+
+**Visual debugging overlays** - Highlight elements, show layout information.
+
+**Key Methods:**
+- `Overlay.enable` - Enable overlay
+- `Overlay.highlightNode` - Highlight element (visual only)
+- `Overlay.hideHighlight` - Clear highlights
+- `Overlay.setShowViewportSizeOnResize` - Show viewport size
+
+**Event-based:** Methods like `highlightNode` show visual feedback but return empty responses.
+
+**Examples:**
+```bash
+# Highlight element by nodeId
+bdg cdp Overlay.highlightNode --params '{
+  "nodeId":123,
+  "highlightConfig":{
+    "contentColor":{"r":255,"g":0,"b":0,"a":0.3}
+  }
+}'
+
+# Clear highlights
+bdg cdp Overlay.hideHighlight
+```
+
+## Security & Auditing
+
+### Security
+
+**Security state inspection** - Certificate info, mixed content, security issues.
+
+**Key Methods:**
+- `Security.enable` - Enable security domain
+- `Security.setIgnoreCertificateErrors` - Ignore cert errors
+
+### Audits
+
+**Automated audits** - Accessibility, contrast, and other automated checks.
+
+**Key Methods:**
+- `Audits.enable` - Enable audits
+- `Audits.checkContrast` - Check color contrast
+
+**Event-based:** Results arrive via `Audits.issueAdded` events, not method responses.
+
+**Examples:**
+```bash
+# Enable and check contrast
+bdg cdp Audits.enable
+bdg cdp Audits.checkContrast
+# Results arrive via events
+```
+
+**Alternative:** Use `bdg dom eval 'getComputedStyle(element).color'` for direct contrast checking.
+
+## Storage
+
+### Storage
+
+**Storage inspection** - IndexedDB, localStorage, sessionStorage, cache.
+
+**Key Methods:**
+- `Storage.getStorageKeyForFrame` - Get storage key
+- `Storage.clearDataForOrigin` - Clear origin data
+- `Storage.getCookies` - Get cookies (alternative to Network.getCookies)
+
+### IndexedDB
+
+**IndexedDB inspection** - Query and modify IndexedDB databases.
+
+**Key Methods:**
+- `IndexedDB.requestDatabaseNames` - List databases
+- `IndexedDB.requestDatabase` - Get database metadata
+
+### CacheStorage
+
+**Cache Storage API** - Service worker cache inspection.
+
+**Key Methods:**
+- `CacheStorage.requestCacheNames` - List caches
+- `CacheStorage.requestEntries` - Get cache entries
+
+## Device Emulation
+
+### Emulation
+
+**Device and sensor emulation** - Viewport, user agent, geolocation, device metrics.
+
+**Key Methods:**
+- `Emulation.setDeviceMetricsOverride` - Set viewport size
+- `Emulation.setUserAgentOverride` - Set user agent
+- `Emulation.setGeolocationOverride` - Set geolocation
+- `Emulation.setTouchEmulationEnabled` - Enable touch events
+
+**Examples:**
+```bash
+# Set mobile viewport
+bdg cdp Emulation.setDeviceMetricsOverride --params '{
+  "width":375,
+  "height":667,
+  "deviceScaleFactor":2,
+  "mobile":true
+}'
+
+# Set user agent
+bdg cdp Emulation.setUserAgentOverride --params '{
+  "userAgent":"Mozilla/5.0 (iPhone; CPU iPhone OS 13_0 like Mac OS X)"
+}'
+```
+
+## Advanced Domains
+
+### Target
+
+**Target management** - Create, attach to, and manage browser targets (pages, workers).
+
+**Key Methods:**
+- `Target.getTargets` - List all targets
+- `Target.createTarget` - Create new page
+- `Target.attachToTarget` - Attach to target
+
+### Browser
+
+**Browser-level operations** - Version info, permissions, downloads.
+
+**Key Methods:**
+- `Browser.getVersion` - Get browser version
+- `Browser.getBrowserCommandLine` - Get launch arguments
+- `Browser.grantPermissions` - Grant permissions
+
+**Examples:**
+```bash
+# Get browser version
+bdg cdp Browser.getVersion
+
+# Grant geolocation permission
+bdg cdp Browser.grantPermissions --params '{
+  "permissions":["geolocation"]
+}'
+```
+
+### SystemInfo
+
+**System information** - GPU, process info.
+
+**Key Methods:**
+- `SystemInfo.getInfo` - Get system info
+- `SystemInfo.getProcessInfo` - Get process info
+
+## Complete Domain List
+
+To see all 53 domains with descriptions and method counts:
+
+```bash
+bdg cdp --list
+```
+
+**All domains:**
+Accessibility, Animation, Audits, BackgroundService, Browser, CacheStorage, Cast, Console, CSS, Database, Debugger, DeviceAccess, DeviceOrientation, DOM, DOMDebugger, DOMSnapshot, DOMStorage, Emulation, EventBreakpoints, Fetch, FileSystem, HeadlessExperimental, HeapProfiler, IndexedDB, Input, Inspector, IO, LayerTree, Log, Media, Memory, Network, Overlay, Page, Performance, PerformanceTimeline, Preload, Profiler, PWA, Runtime, Schema, Security, ServiceWorker, Storage, SystemInfo, Target, Tethering, Tracing, WebAudio, WebAuthn, and more.
+
+## External Resources
+
+- [Chrome DevTools Protocol Documentation](https://chromedevtools.github.io/devtools-protocol/) - Official CDP reference with all domains, methods, and events
+- [CDP Viewer](https://chromedevtools.github.io/devtools-protocol/tot/) - Interactive protocol explorer
+
+## Related Commands
+
+- [CDP Overview](/commands/cdp/overview) - How to use the `bdg cdp` command
+- `bdg dom` - High-level DOM operations
+- `bdg network` - Network request inspection
+- `bdg console` - Console message inspection

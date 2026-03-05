@@ -1,0 +1,378 @@
+---
+title: 'bdg details'
+description: 'Get detailed information for a specific request or console message'
+---
+
+## Overview
+
+Retrieve complete details for a specific network request or console message, including headers, body content, and timing information.
+
+## Syntax
+
+```bash
+bdg details <type> <id> [options]
+```
+
+## Arguments
+
+<ParamField path="type" type="string" required>
+  Type of item to inspect. Must be either `network` or `console`.
+  
+  ```bash
+  bdg details network <requestId>
+  bdg details console <index>
+  ```
+</ParamField>
+
+<ParamField path="id" type="string" required>
+  Identifier for the item:
+  - For **network**: Request ID (e.g., `"1234.1"`)
+  - For **console**: Message index (0-based integer)
+  
+  ```bash
+  # Network request by ID
+  bdg details network "1234.1"
+  
+  # Console message by index
+  bdg details console 0
+  ```
+</ParamField>
+
+## Options
+
+<ParamField path="--json" type="boolean" default="false">
+  Output as JSON instead of human-readable format.
+  
+  ```bash
+  bdg details network "1234.1" --json
+  bdg details console 0 --json
+  ```
+</ParamField>
+
+## Output Format
+
+### Network Request Details
+
+**Human-readable format:**
+```text
+Network Request Details
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Request ID    1234.1
+URL           https://api.example.com/users
+Method        GET
+Status        200
+Resource Type XHR
+MIME Type     application/json
+
+Request Headers:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Accept: application/json
+  Authorization: Bearer eyJhbGc...
+  Content-Type: application/json
+  User-Agent: Mozilla/5.0...
+
+Request Body:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{"page": 1, "limit": 20}
+
+Response Headers:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Cache-Control: no-cache
+  Content-Type: application/json
+  X-RateLimit-Limit: 1000
+  X-RateLimit-Remaining: 999
+
+Response Body:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{
+  "users": [
+    {"id": 1, "name": "Alice"},
+    {"id": 2, "name": "Bob"}
+  ],
+  "total": 2
+}
+```
+
+**JSON format:**
+```json
+{
+  "version": "0.5.1",
+  "success": true,
+  "data": {
+    "type": "network",
+    "item": {
+      "requestId": "1234.1",
+      "url": "https://api.example.com/users",
+      "method": "GET",
+      "status": 200,
+      "resourceType": "XHR",
+      "mimeType": "application/json",
+      "requestHeaders": {
+        "Accept": "application/json",
+        "Authorization": "Bearer eyJhbGc...",
+        "Content-Type": "application/json"
+      },
+      "requestBody": "{\"page\": 1, \"limit\": 20}",
+      "responseHeaders": {
+        "Cache-Control": "no-cache",
+        "Content-Type": "application/json",
+        "X-RateLimit-Limit": "1000",
+        "X-RateLimit-Remaining": "999"
+      },
+      "responseBody": "{\"users\": [{\"id\": 1, \"name\": \"Alice\"}, {\"id\": 2, \"name\": \"Bob\"}], \"total\": 2}"
+    }
+  }
+}
+```
+
+### Console Message Details
+
+**Human-readable format:**
+```text
+Console Message Details
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Type         error
+Timestamp    2025-11-06T12:00:00.123Z
+Text         Failed to fetch user data
+
+Arguments:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  [0]: "Failed to fetch user data"
+  [1]: {
+    "error": {
+      "code": "NETWORK_ERROR",
+      "message": "Connection timeout"
+    }
+  }
+```
+
+**JSON format:**
+```json
+{
+  "version": "0.5.1",
+  "success": true,
+  "data": {
+    "type": "console",
+    "item": {
+      "type": "error",
+      "timestamp": 1699272000123,
+      "text": "Failed to fetch user data",
+      "args": [
+        "Failed to fetch user data",
+        {
+          "error": {
+            "code": "NETWORK_ERROR",
+            "message": "Connection timeout"
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+## Examples
+
+### Network Request Details
+
+**Find request ID from peek:**
+```bash
+# Step 1: List requests to find ID
+bdg peek --network --json | jq '.data.preview.data.network[0].requestId'
+# Output: "1234.1"
+
+# Step 2: Get full details
+bdg details network "1234.1"
+```
+
+**Inspect specific request:**
+```bash
+bdg details network "1234.1"
+```
+
+**Get JSON output for processing:**
+```bash
+bdg details network "1234.1" --json
+```
+
+**Extract specific headers:**
+```bash
+bdg details network "1234.1" --json | jq '.data.item.responseHeaders["Content-Type"]'
+```
+
+**Check response body:**
+```bash
+bdg details network "1234.1" --json | jq -r '.data.item.responseBody' | jq '.'
+```
+
+### Console Message Details
+
+**Find message index from peek:**
+```bash
+# Step 1: List console messages
+bdg peek --console
+# Output shows messages with implicit indices [0], [1], [2]...
+
+# Step 2: Get details for first message
+bdg details console 0
+```
+
+**Inspect console error:**
+```bash
+bdg details console 0
+```
+
+**Get JSON output:**
+```bash
+bdg details console 0 --json
+```
+
+**Extract error arguments:**
+```bash
+bdg details console 0 --json | jq '.data.item.args'
+```
+
+## Finding Item Identifiers
+
+### Network Request IDs
+
+Request IDs are assigned by Chrome DevTools Protocol and can be found using:
+
+**From `bdg peek`:**
+```bash
+bdg peek --network --json | jq -r '.data.preview.data.network[].requestId'
+```
+
+**From `bdg network list`:**
+```bash
+bdg network list --json | jq -r '.data.requests[].requestId'
+```
+
+### Console Message Indices
+
+Console messages use 0-based indices in the order they were captured:
+
+**From `bdg peek`:**
+```bash
+# Human-readable shows implicit indices
+bdg peek --console
+
+# JSON shows array with indices
+bdg peek --console --json | jq '.data.preview.data.console | to_entries[] | {index: .key, type: .value.type, text: .value.text}'
+```
+
+**From `bdg console`:**
+```bash
+bdg console --list
+```
+
+## Use Cases
+
+### Debug Failed API Requests
+
+```bash
+# Find failed requests
+bdg peek --network --json | jq '.data.preview.data.network[] | select(.status >= 400) | .requestId'
+
+# Get details for specific failure
+bdg details network "1234.1"
+
+# Check response headers for CORS/CSP issues
+bdg details network "1234.1" --json | jq '.data.item.responseHeaders'
+```
+
+### Inspect Console Errors
+
+```bash
+# List console errors
+bdg console --json | jq '.data.messages[] | select(.type == "error") | .text'
+
+# Get full error details with stack trace
+bdg details console 0
+
+# Extract error arguments for processing
+bdg details console 0 --json | jq '.data.item.args'
+```
+
+### Analyze Request/Response Bodies
+
+```bash
+# Check POST request body
+bdg details network "1234.1" --json | jq -r '.data.item.requestBody' | jq '.'
+
+# Validate response structure
+bdg details network "1234.1" --json | jq -r '.data.item.responseBody' | jq 'keys'
+
+# Extract specific fields from response
+bdg details network "1234.1" --json | jq -r '.data.item.responseBody' | jq '.users[].name'
+```
+
+### Security Header Inspection
+
+```bash
+# Check Content-Security-Policy
+bdg details network "1234.1" --json | jq -r '.data.item.responseHeaders["Content-Security-Policy"]'
+
+# Verify CORS headers
+bdg details network "1234.1" --json | jq '.data.item.responseHeaders | with_entries(select(.key | startswith("Access-Control")))'
+
+# Check auth tokens
+bdg details network "1234.1" --json | jq -r '.data.item.requestHeaders.Authorization'
+```
+
+## Exit Codes
+
+<ParamField path="0" type="SUCCESS">
+  Command completed successfully.
+</ParamField>
+
+<ParamField path="81" type="INVALID_ARGUMENTS">
+  Invalid type argument.
+  
+  **Common causes:**
+  - Type is not `network` or `console`
+  - Missing required arguments
+  
+  **Solution:** Use `bdg details network <requestId>` or `bdg details console <index>`
+</ParamField>
+
+<ParamField path="83" type="RESOURCE_NOT_FOUND">
+  Item not found.
+  
+  **Common causes:**
+  - Request ID does not exist
+  - Console message index out of range
+  - No active session
+  
+  **Solutions:**
+  - For network: Use `bdg peek --network` to see available request IDs
+  - For console: Use `bdg peek --console` to see available message indices
+  - Check session is active: `bdg status`
+</ParamField>
+
+<ParamField path="101" type="CDP_CONNECTION_FAILURE">
+  Cannot connect to daemon.
+  
+  **Solution:** Check session status with `bdg status`
+</ParamField>
+
+## Related Commands
+
+- [`bdg peek`](/commands/peek) - Preview collected data to find request IDs and message indices
+- [`bdg network list`](/commands/network/list) - List and filter network requests
+- [`bdg network headers`](/commands/network/headers) - Inspect HTTP headers specifically
+- [`bdg console`](/commands/console) - Smart console message inspection
+
+## Tips
+
+<Tip>
+  Combine `bdg peek --json` with `jq` to quickly find the request ID you need before calling `bdg details`.
+</Tip>
+
+<Tip>
+  For network requests, use [`bdg network headers`](/commands/network/headers) if you only need header information (faster than full details).
+</Tip>
+
+<Warning>
+  Response bodies may be truncated based on the `--max-body-size` setting (default: 5MB). Large responses will show partial content.
+</Warning>

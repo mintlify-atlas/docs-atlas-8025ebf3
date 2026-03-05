@@ -1,0 +1,356 @@
+---
+title: "Overview"
+description: "Why bdg is built for AI agents: token efficiency, self-documenting features, and real examples"
+---
+
+## Built for AI Agents
+
+bdg is designed from the ground up for programmatic consumption by AI agents. Unlike traditional browser automation tools that prioritize human ergonomics, bdg optimizes for **information density**, **predictability**, and **token efficiency**.
+
+```bash
+# Agent explores capabilities without reading docs
+bdg cdp --list                              # 53 domains
+bdg cdp Network --list                      # 39 methods
+bdg cdp Network.getCookies --describe       # Full schema + examples
+bdg cdp Network.getCookies                  # Execute
+```
+
+## Why bdg Over MCP?
+
+We benchmarked bdg against Chrome DevTools MCP Server on real developer debugging tasks.
+
+<CardGroup cols={2}>
+  <Card title="Token Efficiency" icon="gauge-high">
+    **33% better** token efficiency through selective queries vs full accessibility tree dumps
+  </Card>
+  <Card title="Capability Coverage" icon="microchip">
+    **300+ CDP methods** exposed directly vs MCP's limited tool set
+  </Card>
+  <Card title="CLI Score" icon="trophy">
+    **77/100** points on benchmark suite
+  </Card>
+  <Card title="MCP Score" icon="chart-simple">
+    **60/100** points on same suite
+  </Card>
+</CardGroup>
+
+### Benchmark Highlights
+
+| Capability | bdg | MCP |
+|------------|-----|-----|
+| Console errors with stack traces | ✓ Full | Partial |
+| Memory profiling | ✓ | ✗ |
+| Network HAR export | ✓ | ✗ |
+| Batch JavaScript execution | ✓ | ✗ |
+| Selective DOM queries | ✓ | ✗ |
+| Direct CDP method access | ✓ 300+ | ✗ |
+
+<Info>
+  **Full benchmark analysis:** [MCP vs CLI for AI Agents](/agents/benchmarks)
+</Info>
+
+## Self-Documenting Features
+
+bdg implements progressive discovery - agents learn capabilities through interaction, not documentation.
+
+### Machine-Readable Help
+
+```bash
+bdg --help --json
+```
+
+```json
+{
+  "name": "bdg",
+  "version": "0.6.0",
+  "commands": [
+    {
+      "name": "cdp",
+      "description": "Execute CDP commands",
+      "options": [
+        {"name": "--params", "type": "json", "required": false},
+        {"name": "--list", "type": "boolean", "required": false}
+      ],
+      "examples": [
+        "bdg cdp --list",
+        "bdg cdp Network --list",
+        "bdg cdp Runtime.evaluate --params '{\"expression\":\"1+1\"}'"
+      ]
+    }
+  ],
+  "exit_codes": {
+    "0": "Success",
+    "80": "Invalid URL provided",
+    "83": "Resource not found"
+  }
+}
+```
+
+### Domain Introspection
+
+Agents can discover all 644 CDP methods without external documentation:
+
+```bash
+# List all CDP domains
+bdg cdp --list
+```
+
+```
+Available CDP Domains (53):
+
+Accessibility    Animation       Audits          Autofill
+Browser          CSS             CacheStorage    Cast
+Console          DOM             DOMDebugger     DOMSnapshot
+Database         DeviceAccess    Emulation       EventBreakpoints
+Fetch            HeadlessExperimental  IO        IndexedDB
+Input            Inspector       LayerTree       Log
+Media            Memory          Network         Overlay
+Page             Performance     PerformanceTimeline  Preload
+Profiler         Runtime         Schema          Security
+ServiceWorker    Storage         SystemInfo      Target
+Tracing          WebAudio        WebAuthn
+```
+
+<Tip>
+  All discovery commands support `--json` for structured output
+</Tip>
+
+### Semantic Search
+
+Agents can search by concept without knowing exact method names:
+
+```bash
+bdg cdp --search cookie
+```
+
+```
+Found 14 methods matching 'cookie':
+
+Network.getCookies
+  Returns all browser cookies
+
+Network.getAllCookies
+  Returns all browser cookies for all URLs
+
+Network.deleteCookies
+  Deletes browser cookies with matching name
+
+Network.setCookie
+  Sets a cookie with the given cookie data
+
+Storage.getCookies
+  Returns all browser cookies
+
+... (9 more results)
+```
+
+## Real-World Examples
+
+### Example 1: Memory Leak Detection
+
+bdg provides direct CDP access for performance debugging:
+
+```bash
+# Take baseline measurement
+bdg cdp Runtime.getHeapUsage
+```
+
+```json
+{
+  "version": "0.6.0",
+  "success": true,
+  "data": {
+    "usedSize": 833000,
+    "totalSize": 1500000
+  }
+}
+```
+
+```bash
+# Trigger potential leak
+bdg dom click "button"
+
+# Re-measure
+bdg cdp Runtime.getHeapUsage
+```
+
+```json
+{
+  "version": "0.6.0",
+  "success": true,
+  "data": {
+    "usedSize": 790000,
+    "totalSize": 3000000
+  }
+}
+```
+
+<Check>
+  **44% embedder heap growth detected** - clear indication of memory leak
+</Check>
+
+### Example 2: Batch Operations
+
+bdg enables efficient batch testing through JavaScript evaluation:
+
+```bash
+# Click all 17 buttons with timeouts in one command
+bdg cdp Runtime.evaluate --params '{
+  "expression": "document.querySelectorAll(\"button\").forEach((b,i) => setTimeout(() => b.click(), i*100))"
+}'
+
+# Capture all resulting errors
+bdg console --json
+```
+
+<Info>
+  This captured **18 errors (14 unique)** in a single operation - impossible with MCP's click-by-click approach
+</Info>
+
+### Example 3: Network Analysis
+
+Export network activity to standard HAR format:
+
+```bash
+# Export all network requests
+bdg network har - | jq '.log.entries[] | select(.response.status >= 400)'
+```
+
+```json
+[
+  {
+    "request": {
+      "method": "GET",
+      "url": "https://example.com/api/data"
+    },
+    "response": {
+      "status": 404,
+      "statusText": "Not Found"
+    },
+    "time": 145
+  }
+]
+```
+
+### Example 4: Form Testing
+
+Token-efficient form interaction with automatic validation:
+
+```bash
+# Discover form structure
+bdg dom form --brief
+
+# Fill and submit
+bdg dom fill "input[name='email']" "test@example.com"
+bdg dom fill "input[name='age']" "25"
+bdg dom submit "form"
+```
+
+<Tip>
+  Form validation errors appear in structured JSON with recovery suggestions
+</Tip>
+
+## Token Efficiency in Practice
+
+### Selective Queries vs Full Dumps
+
+| Approach | bdg | MCP |
+|----------|-----|-----|
+| Query strategy | Fetch what you need | Dump everything |
+| 195-option dropdown | ~50 tokens | ~5,000 tokens |
+| Complex page (Amazon) | ~1,200 tokens | ~52,000 tokens |
+
+### Real Benchmark Data
+
+**Form validation testing:**
+- bdg: 3,500 tokens for 4 test scenarios
+- MCP: 15,200 tokens for 3 test scenarios
+- **4.3× more efficient** with better coverage
+
+**Multiple error collection:**
+- bdg: 18,700 tokens capturing 18 errors (14 unique)
+- MCP: 9,300 tokens capturing 3 errors
+- **6× more errors** for 2× tokens = better value
+
+<Card title="Token Efficiency Score" icon="sparkles">
+  bdg: **202.1** (Score × 100 / Tokens in thousands)
+  
+  MCP: **152.3**
+  
+  **+33% advantage** for bdg
+</Card>
+
+## Unix Composability
+
+bdg output pipes naturally with standard Unix tools:
+
+```bash
+# Count console errors
+bdg console --json | jq '.errors | length'
+
+# Filter network requests
+bdg network har - | jq '.log.entries[] | select(.response.status >= 400)'
+
+# Get first 5 query results
+bdg dom query "button" | head -5
+
+# Monitor console in real-time
+bdg peek --follow | grep -i error
+```
+
+<Note>
+  All commands separate **data → stdout** and **logs → stderr** for clean piping
+</Note>
+
+## Predictable Output
+
+Agents can estimate token cost before calling:
+
+```bash
+# Proportional to matched elements
+bdg dom query ".error"
+
+# Bounded by limit parameter
+bdg console --last 10
+
+# Single element = predictable size
+bdg dom get 0
+```
+
+Compare to MCP's `take_snapshot` which returns unpredictable output:
+- Could be 5K tokens
+- Could be 52K tokens
+- Agent cannot control size
+
+## When to Use bdg
+
+<CardGroup cols={2}>
+  <Card title="Use bdg" icon="check" color="#00A67E">
+    - Developer debugging workflows
+    - Memory/performance profiling
+    - Network analysis with HAR export
+    - Batch operations and testing
+    - Token-constrained agents
+    - Unix pipeline integration
+  </Card>
+  <Card title="Consider MCP" icon="info" color="#0074E4">
+    - Cross-platform integration needs
+    - Sandboxed environments
+    - WCAG compliance auditing
+    - Already invested in MCP infrastructure
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Discovery Pattern" icon="magnifying-glass" href="/agents/discovery-pattern">
+    Learn how agents discover capabilities programmatically
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/agents/error-handling">
+    Semantic exit codes and recovery suggestions
+  </Card>
+  <Card title="Benchmarks" icon="chart-line" href="/agents/benchmarks">
+    Full CLI vs MCP benchmark analysis
+  </Card>
+</CardGroup>
